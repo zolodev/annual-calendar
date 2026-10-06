@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="sv">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'">
+  <meta name="theme-color" content="#2563eb">
+  <title>Årshjul</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1 data-i18n="appName">Årshjul</h1>
+    <select id="wheel-select" data-i18n-title="wheel"></select>
+    <button id="btn-wheel" class="icon" data-i18n-title="wheelSettings">⚙</button>
+    <input id="search" type="search" data-i18n-ph="search">
+    <button id="btn-add" class="primary" data-i18n="addTask"></button>
+    <button id="btn-export" data-i18n="export"></button>
+    <label class="btn"><span data-i18n="import"></span><input id="file" type="file" accept=".json,application/json" hidden></label>
+    <button id="btn-lang"></button>
+  </header>
+
+  <nav class="filters">
+    <div id="chips" class="chips"></div>
+    <div id="status" class="seg" role="group" data-i18n-title="status"></div>
+  </nav>
+
+  <main>
+    <section class="card"><svg id="wheel" role="group" data-i18n-title="appName"></svg></section>
+    <section class="card" id="panel" aria-live="polite"></section>
+  </main>
+
+  <footer><span data-i18n="appName"></span> <span id="version"></span> · <span id="backup"></span></footer>
+
+  <dialog id="dlg-task">
+    <form id="form-task">
+      <h2 id="task-heading"></h2>
+      <label><span data-i18n="title"></span><input name="title" required></label>
+      <div class="row">
+        <label><span data-i18n="start"></span><input name="start" type="date" required></label>
+        <label><span data-i18n="end"></span><input name="end" type="date" required></label>
+      </div>
+      <small class="muted" data-i18n="wrapHint"></small>
+      <fieldset>
+        <legend data-i18n="units"></legend>
+        <div id="task-units" class="checks"></div>
+      </fieldset>
+      <label><span data-i18n="note"></span><textarea name="note" rows="2"></textarea></label>
+      <label><span data-i18n="checklist"></span><textarea name="items" rows="5" data-i18n-ph="checklistHint"></textarea></label>
+      <div class="actions">
+        <button type="button" id="task-delete" class="danger" data-i18n="delete"></button>
+        <span class="spacer"></span>
+        <button type="button" data-close data-i18n="cancel"></button>
+        <button class="primary" data-i18n="save"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-units">
+    <h2 data-i18n="manageUnits"></h2>
+    <div id="unit-list"></div>
+    <div class="actions">
+      <button type="button" id="unit-add" data-i18n="newUnit"></button>
+      <span class="spacer"></span>
+      <button type="button" class="primary" data-close data-i18n="close"></button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-wheel">
+    <form id="form-wheel">
+      <h2 data-i18n="wheelSettings"></h2>
+      <label><span data-i18n="wheelName"></span><input name="name" required></label>
+      <div class="actions">
+        <button type="button" id="wheel-delete" class="danger" data-i18n="delete"></button>
+        <span class="spacer"></span>
+        <button type="button" data-close data-i18n="cancel"></button>
+        <button class="primary" data-i18n="save"></button>
+      </div>
+    </form>
+  </dialog>
+</body>
+
+</html>

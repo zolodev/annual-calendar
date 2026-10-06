@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="sv">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Årshjul – mock-up</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/7.0.0/fuse.min.js"></script>
+    <style>
+        :root {
+            --bg: #f5f6f8;
+            --card: #fff;
+            --text: #1e2430;
+            --muted: #6b7280;
+            --line: #e3e6ec;
+            --accent: #2563eb;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #14171c;
+                --card: #1d2128;
+                --text: #e8eaee;
+                --muted: #98a0ae;
+                --line: #2d333d;
+                --accent: #6ea0ff;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font: 15px/1.4 system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--card);
+            border-bottom: 1px solid var(--line);
+        }
+
+        header h1 {
+            font-size: 18px;
+            margin: 0 auto 0 0;
+        }
+
+        input[type=search] {
+            padding: 8px 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--bg);
+            color: var(--text);
+            min-width: 220px;
+        }
+
+        button,
+        .btn {
+            padding: 8px 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--card);
+            color: var(--text);
+            cursor: pointer;
+            font: inherit;
+        }
+
+        button:hover,
+        .btn:hover {
+            border-color: var(--accent);
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: minmax(320px, 1.2fr) minmax(300px, 1fr);
+            gap: 16px;
+            padding: 16px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 800px) {
+            main {
+                grid-template-columns: 1fr;
+                padding: 16px;
+            }
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .month {
+            fill: var(--card);
+            stroke: var(--line);
+            cursor: pointer;
+        }
+
+        .month:hover,
+        .month.sel {
+            fill: var(--accent);
+            fill-opacity: .18;
+        }
+
+        .month-label {
+            font-size: 11px;
+            fill: var(--text);
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+
+        .task {
+            cursor: pointer;
+            stroke: var(--card);
+            stroke-width: 1.5;
+            transition: opacity .15s;
+        }
+
+        .task:hover {
+            filter: brightness(1.15);
+        }
+
+        .dim {
+            opacity: .15;
+        }
+
+        .task-label {
+            font-size: 10px;
+            fill: #fff;
+            pointer-events: none;
+        }
+
+        .today {
+            stroke: #dc2626;
+            stroke-width: 1.5;
+            stroke-dasharray: 3 2;
+        }
+
+        .center-year {
+            font-size: 22px;
+            font-weight: 700;
+            fill: var(--text);
+            text-anchor: middle;
+        }
+
+        .center-sub {
+            font-size: 10px;
+            fill: var(--muted);
+            text-anchor: middle;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 14px;
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        h2 {
+            margin: 0 0 4px;
+            font-size: 20px;
+        }
+
+        .sub {
+            color: var(--muted);
+            margin-bottom: 12px;
+        }
+
+        .todo {
+            border: 1px solid var(--line);
+            border-left-width: 5px;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+
+        .todo.hl {
+            outline: 2px solid var(--accent);
+        }
+
+        .todo-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .todo-dates {
+            font-weight: 400;
+            color: var(--muted);
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .bar {
+            height: 4px;
+            background: var(--line);
+            border-radius: 2px;
+            margin: 8px 0;
+        }
+
+        .bar>i {
+            display: block;
+            height: 100%;
+            border-radius: 2px;
+        }
+
+        .todo label {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 2px 0;
+            cursor: pointer;
+        }
+
+        .todo label.done span {
+            text-decoration: line-through;
+            color: var(--muted);
+        }
+
+        .empty {
+            color: var(--muted);
+        }
+
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            padding: 10px 16px 0;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .chip {
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+        }
+
+        .chip.on {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .tag {
+            font-size: 11px;
+            padding: 1px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            margin-right: 4px;
+            white-space: nowrap;
+        }
+
+        select {
+            padding: 8px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--card);
+            color: var(--text);
+            font: inherit;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Årshjul </h1>
+        <input id="search" type="search" placeholder="Sök uppgift (fuzzy)…">
+        <select id="colorby" title="Färga efter">
+            <option value="cat">Färg: kategori</option>
+            <option value="unit">Färg: enhet</option>
+        </select>
+        <button id="btn-year">Hela året</button>
+        <button id="btn-export">Exportera</button>
+        <label class="btn">Importera<input id="file" type="file" accept=".json" hidden></label>
+    </header>
+
+    <nav class="chips" id="chips" aria-label="Filtrera enheter"></nav>
+    <main>
+        <section class="card">
+            <svg id="wheel" viewBox="-220 -220 440 440" role="img" aria-label="Årshjul"></svg>
+            <div class="legend" id="legend"></div>
+        </section>
+        <section class="card" id="panel"></section>
+    </main>
+
+    <script>
+// ---- Data (i riktiga appen: IndexedDB) -------------------------------------
+const YEAR = 2026;
+const categories = {
+  ekonomi:  { name: 'Budget & bokslut', color: '#2563eb' },
+  sakerhet: { name: 'Säkerhet',  color: '#dc2626' },
+  hr:       { name: 'Personal',  color: '#16a34a' },
+  plan:     { name: 'Planering', color: '#d97706' },
+};
+const units = {
+  it:   { name: 'IT & Säkerhet', color: '#7c3aed' },
+  ekon: { name: 'Ekonomi',       color: '#0891b2' },
+  hr:   { name: 'HR',            color: '#db2777' },
+};
+let tasks = [
+  { id: 1, units: ["it","ekon","hr"], title: 'Verksamhetsplan', cat: 'plan', start: '2026-01-05', end: '2026-02-13', items: [['Utvärdera föregående år', 1], ['Ta fram mål', 0], ['Fastställ i ledningsgrupp', 0]] },
+  { id: 2, units: ["ekon"], title: 'Bokslut & årsredovisning', cat: 'ekonomi', start: '2026-01-15', end: '2026-03-15', items: [['Stäng räkenskaper', 1], ['Skriv årsredovisning', 1], ['Skicka in', 1]] },
+  { id: 3, units: ["hr"], title: 'Medarbetarsamtal', cat: 'hr', start: '2026-04-06', end: '2026-05-29', items: [['Boka tider', 1], ['Genomför samtal', 0]] },
+  { id: 4, units: ["hr"], title: 'Semesterplanering', cat: 'hr', start: '2026-03-02', end: '2026-04-03', items: [['Samla önskemål', 1], ['Fastställ bemanning', 1]] },
+  { id: 5, units: ["ekon"], title: 'Delårsrapport', cat: 'ekonomi', start: '2026-07-20', end: '2026-08-14', items: [['Sammanställ utfall', 0], ['Prognos helår', 0]] },
+  { id: 6, units: ["it"], title: 'Säkerhetsgenomgång', cat: 'sakerhet', start: '2026-10-01', end: '2026-10-31', items: [['Uppdatera kontaktlistor', 1], ['Byt lösenord på servrar', 0], ['Kontrollera backuper (test-restore)', 0], ['Granska tillträde i passersystemet', 0]] },
+  { id: 7, units: ["it","ekon"], title: 'Budget', cat: 'ekonomi', start: '2026-10-15', end: '2026-11-15', items: [['Underlag från team', 0], ['Sammanställ budget', 0], ['Skicka på remiss', 0]] },
+  { id: 8, units: ["it","ekon","hr"], title: 'Remiss', cat: 'plan', start: '2026-11-15', end: '2026-12-10', items: [['Samla in synpunkter', 0], ['Fastställ budget', 0]] },
+  { id: 9, units: ["it"], title: 'Brandskydd & utrymning', cat: 'sakerhet', start: '2026-05-04', end: '2026-05-15', items: [['Övning', 0]] },
+  { id: 10, units: ["hr"], title: 'Julavslutning', cat: 'hr', start: '2026-12-14', end: '2026-12-18', items: [['Boka lokal', 0]] },
+];
+const MONTHS = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December'];
+
+// ---- Hjälpfunktioner --------------------------------------------------------
+const yearStart = new Date(YEAR, 0, 1), yearEnd = new Date(YEAR + 1, 0, 1);
+const dayCount = (yearEnd - yearStart) / 864e5;
+const toDate = s => new Date(s + 'T00:00:00');
+const angle = d => ((d - yearStart) / 864e5 / dayCount) * 2 * Math.PI - Math.PI / 2;   // 1 jan = överst
+const pt = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
+const fmt = s => toDate(s).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+const progress = t => t.items.length ? t.items.filter(i => i[1]).length / t.items.length : 0;
+const overlapsMonth = (t, m) => toDate(t.start) < new Date(YEAR, m + 1, 1) && toDate(t.end) >= new Date(YEAR, m, 1);
+
+function sector(r0, r1, a0, a1) {
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  return `M${pt(r1, a0)}A${r1} ${r1} 0 ${large} 1 ${pt(r1, a1)}L${pt(r0, a1)}A${r0} ${r0} 0 ${large} 0 ${pt(r0, a0)}Z`;
+}
+
+// Enkel lane-tilldelning: första lane där uppgiften inte krockar.
+function assignLanes(list) {
+  const laneEnds = [];
+  [...list].sort((a, b) => a.start.localeCompare(b.start)).forEach(t => {
+    let i = laneEnds.findIndex(end => end < t.start);
+    if (i === -1) i = laneEnds.push('') - 1;
+    laneEnds[i] = t.end;
+    t.lane = i;
+  });
+  return laneEnds.length;
+}
+
+// ---- Tillstånd ----------------------------------------------------------------
+let selectedMonth = null;      // null = hela året
+let activeUnits = new Set(Object.keys(units));   // filter: valda enheter
+let colorBy = 'cat';
+let highlight = null;          // Set med task-id från sökning/klick
+const visibleTasks = () => tasks.filter(t => t.units.some(u => activeUnits.has(u)));
+const taskColor = t => colorBy === 'unit' ? units[t.units[0]].color : categories[t.cat].color;
+const fuse = () => new Fuse(visibleTasks(), { keys: ['title', 'cat', 'items.0'], threshold: 0.4 });
+
+// ---- Rendering ------------------------------------------------------------------
+const svg = document.getElementById('wheel');
+const NS = 'http://www.w3.org/2000/svg';
+
+function renderWheel() {
+  const shown = visibleTasks();
+  const lanes = assignLanes(shown);
+  const R_MONTH0 = 70, R_MONTH1 = 120, R_LANE0 = 128, LANE_H = Math.min(26, 90 / Math.max(lanes, 1));
+  let h = '';
+
+  // Månader (inre ring)
+  MONTHS.forEach((name, m) => {
+    const a0 = angle(new Date(YEAR, m, 1)), a1 = angle(new Date(YEAR, m + 1, 1));
+    const [x, y] = pt((R_MONTH0 + R_MONTH1) / 2, (a0 + a1) / 2);
+    h += `<path class="month ${m === selectedMonth ? 'sel' : ''}" d="${sector(R_MONTH0, R_MONTH1, a0, a1)}" data-month="${m}"><title>${name}</title></path>
+          <text class="month-label" x="${x}" y="${y}">${name.slice(0, 3)}</text>`;
+  });
+
+  // Uppgifter (yttre ringar), med textPath för långa bågar
+  let defs = '';
+  shown.forEach(t => {
+    const r0 = R_LANE0 + t.lane * LANE_H, r1 = r0 + LANE_H - 2;
+    const a0 = angle(toDate(t.start)), a1 = angle(new Date(toDate(t.end).getTime() + 864e5));
+    const dim = highlight && !highlight.has(t.id) ? 'dim' : '';
+    h += `<path class="task ${dim}" d="${sector(r0, r1, a0, a1)}" fill="${taskColor(t)}" data-task="${t.id}">
+            <title>${t.title} (${fmt(t.start)} – ${fmt(t.end)}) · ${t.units.map(u => units[u].name).join(', ')}</title></path>`;
+    const mid = (r0 + r1) / 2;
+    if ((a1 - a0) * mid > t.title.length * 6) {
+      defs += `<path id="p${t.id}" d="M${pt(mid, a0)}A${mid} ${mid} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(mid, a1)}"/>`;
+      h += `<text class="task-label ${dim}" dy="3"><textPath href="#p${t.id}" startOffset="50%" text-anchor="middle">${t.title}</textPath></text>`;
+    }
+  });
+
+  // Idag-markör + mitt
+  const today = new Date();
+  if (today.getFullYear() === YEAR) {
+    const a = angle(today);
+    h += `<line class="today" x1="${pt(R_MONTH0, a)[0]}" y1="${pt(R_MONTH0, a)[1]}" x2="${pt(R_LANE0 + lanes * LANE_H, a)[0]}" y2="${pt(R_LANE0 + lanes * LANE_H, a)[1]}"/>`;
+  }
+  const done = shown.length ? shown.reduce((s, t) => s + progress(t), 0) / shown.length : 0;
+  h += `<text class="center-year" y="-2">${YEAR}</text><text class="center-sub" y="14">${Math.round(done * 100)}% klart</text>`;
+
+  svg.innerHTML = `<defs>${defs}</defs>${h}`;
+}
+
+function renderLegend() {
+  document.getElementById('legend').innerHTML = Object.values(categories)
+    .map(c => `<span><i class="dot" style="background:${c.color}"></i>${c.name}</span>`).join('');
+}
+
+function renderPanel() {
+  const list = visibleTasks()
+    .filter(t => selectedMonth === null || overlapsMonth(t, selectedMonth))
+    .filter(t => !highlight || highlight.has(t.id))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const title = highlight ? 'Sökresultat' : selectedMonth === null ? 'Hela året' : MONTHS[selectedMonth];
+  let h = `<h2>${title}</h2><div class="sub">${list.length} uppgifter</div>`;
+  if (!list.length) h += '<div class="empty">Inget att göra här.</div>';
+  list.forEach(t => {
+    const c = taskColor(t);
+    h += `<div class="todo" style="border-left-color:${c}">
+      <div class="todo-head"><span>${t.title}</span><span class="todo-dates">${fmt(t.start)} – ${fmt(t.end)}</span></div>
+      <div>${t.units.map(u => `<span class="tag">${units[u].name}</span>`).join('')}<span class="tag">${categories[t.cat].name}</span></div>
+      <div class="bar"><i style="width:${progress(t) * 100}%;background:${c}"></i></div>
+      ${t.items.map((it, i) => `<label class="${it[1] ? 'done' : ''}"><input type="checkbox" data-task="${t.id}" data-item="${i}" ${it[1] ? 'checked' : ''}><span>${it[0]}</span></label>`).join('')}
+    </div>`;
+  });
+  document.getElementById('panel').innerHTML = h;
+}
+
+function renderChips() {
+  const all = activeUnits.size === Object.keys(units).length;
+  document.getElementById('chips').innerHTML =
+    `<span style="color:var(--muted);font-size:13px">Enheter:</span>
+     <button class="chip ${all ? 'on' : ''}" data-unit="*">Alla</button>` +
+    Object.entries(units).map(([id, u]) =>
+      `<button class="chip ${activeUnits.has(id) && !all ? 'on' : ''}" data-unit="${id}">${u.name}</button>`).join('');
+}
+const render = () => { renderChips(); renderWheel(); renderPanel(); };
+
+// ---- Events -------------------------------------------------------------------------
+svg.addEventListener('click', e => {
+  const m = e.target.closest('[data-month]'), t = e.target.closest('[data-task]');
+  if (m) { selectedMonth = +m.dataset.month; highlight = null; }
+  else if (t) { highlight = new Set([+t.dataset.task]); }
+  render();
+});
+document.getElementById('panel').addEventListener('change', e => {
+  const { task, item } = e.target.dataset;
+  const t = tasks.find(t => t.id == task);
+  t.items[item][1] = e.target.checked ? 1 : 0;
+  render();
+});
+// Klick på enhet = visa bara den. Ctrl/Cmd-klick = lägg till/ta bort fler.
+document.getElementById('chips').addEventListener('click', e => {
+  const id = e.target.dataset.unit;
+  if (!id) return;
+  if (id === '*') activeUnits = new Set(Object.keys(units));
+  else if (e.ctrlKey || e.metaKey) activeUnits.has(id) ? activeUnits.delete(id) : activeUnits.add(id);
+  else activeUnits = new Set([id]);
+  if (!activeUnits.size) activeUnits = new Set(Object.keys(units));
+  highlight = null;
+  render();
+});
+document.getElementById('colorby').onchange = e => { colorBy = e.target.value; render(); };
+document.getElementById('btn-year').onclick = () => { selectedMonth = null; highlight = null; document.getElementById('search').value = ''; render(); };
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.trim();
+  highlight = q ? new Set(fuse().search(q).map(r => r.item.id)) : null;
+  render();
+});
+
+// Export / import = en JSON-fil (samma format som lagras i IndexedDB)
+document.getElementById('btn-export').onclick = () => {
+  const blob = new Blob([JSON.stringify({ year: YEAR, units, categories, tasks }, null, 2)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `arshjul-${YEAR}.json` });
+  a.click();
+};
+document.getElementById('file').addEventListener('change', async e => {
+  const data = JSON.parse(await e.target.files[0].text());
+  tasks = data.tasks; Object.assign(categories, data.categories); Object.assign(units, data.units);
+  activeUnits = new Set(Object.keys(units));
+  render();
+});
+
+renderLegend();
+render();
+    </script>
+</body>
+
+</html>
