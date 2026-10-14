@@ -43,9 +43,24 @@ export function dateOf(md, y) {
 export const startDate = (t, y) => dateOf(t.start, y);
 export const endDate = (t, y) => dateOf(t.end, wraps(t) ? y + 1 : y);
 
+// ISO 8601-veckonummer (måndag först, vecka 1 innehåller årets första torsdag).
+export function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 3 - ((t.getUTCDay() + 6) % 7));
+  const w1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((t - w1) / 864e5 - 3 + ((w1.getUTCDay() + 6) % 7)) / 7);
+}
+
 export const isoDate = d =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const toMD = iso => iso.slice(5, 10);
+
+// Giltigt datum skrivet exakt som ÅÅÅÅ-MM-DD (2026-02-31 är inte giltigt).
+export function validISO(s) {
+  if (!/^\d{4}-\d\d-\d\d$/.test(s)) return false;
+  const [y, m, d] = parts(s), dt = new Date(y, m - 1, d);
+  return y >= 1000 && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
 
 // Status per år. Uppgift utan punkter har en egen bock (index 0).
 export function doneSet(t, y) {

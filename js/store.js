@@ -1,6 +1,6 @@
 // Lagring i localStorage + validering av data (vid inläsning och import).
 // Litet gränssnitt (list/load/save/remove) så att det kan bytas mot en server senare.
-import { validMD, randomColor, uid } from './model.js';
+import { validMD, randomColor, uid, startDate, endDate, isoDate } from './model.js';
 
 export const FORMAT = 1; // dataformatets version – höj och migrera i sanitize() vid ändrad struktur
 
@@ -38,12 +38,25 @@ export function sanitize(raw) {
         .filter(([y, v]) => YEAR.test(y) && Array.isArray(v))
         .map(([y, v]) => [y, [...new Set(v.filter(Number.isInteger))]])),
       created: DATE.test(t.created) ? t.created : '1970-01-01',
+      notify: t.notify !== false, // notis när försenad (saknas = på)
     }));
-  return { format: FORMAT, id: ID.test(raw.id) ? raw.id : uid(), name: str(raw.name), units, tasks };
+  // Lediga perioder (semester, lov). year = null: varje år, annars bara det året.
+  const periods = arr(raw.periods)
+    .filter(p => validMD(p?.start) && validMD(p?.end))
+    .map(p => ({
+      id: ID.test(p.id) ? p.id : uid(),
+      name: str(p.name),
+      start: p.start,
+      end: p.end,
+      year: Number.isInteger(p.year) && p.year >= 1000 && p.year <= 9999 ? p.year : null,
+    }));
+  const w = { format: FORMAT, id: ID.test(raw.id) ? raw.id : uid(), name: str(raw.name), units, tasks, periods };
+  if (raw.example === true) w.example = true; // exempelhjul (kan rensas när man skapar ett eget)
+  return w;
 }
 
 export function newWheel(name, unitName) {
-  return { format: FORMAT, id: uid(), name, units: { [uid()]: { name: unitName, color: randomColor() } }, tasks: [] };
+  return { format: FORMAT, id: uid(), name, units: { [uid()]: { name: unitName, color: randomColor() } }, tasks: [], periods: [] };
 }
 
 export function list() {
@@ -76,7 +89,98 @@ export function pref(k, v) {
 
 export const parseImport = text => sanitize(JSON.parse(text));
 
-export function exportFile(w) {
-  const name = `arshjul-${w.name.replace(/[^\p{L}\p{N}]+/gu, '-') || w.id}.json`;
-  return { name, blob: new Blob([JSON.stringify(w, null, 2)], { type: 'application/json' }) };
+// ---- Delningskod: hjulet som komprimerad text (deflate + base64url), ingen server behövs.
+// Koden saknar bockar och "skapad" sätts till idag (inget blir försenat direkt hos mottagaren).
+
+const SHARE = 'ARSHJUL1.';
+const MAX_CODE = 2_000_000, MAX_JSON = 10_000_000;
+
+const squeeze = async (bytes, stream) =>
+  new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+
+function b64u(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+export async function shareCode(w) {
+  const data = { ...w, tasks: w.tasks.map(x => ({ ...x, done: {} })) };
+  return SHARE + b64u(await squeeze(enc.encode(JSON.stringify(data)), new CompressionStream('deflate-raw')));
+}
+
+// Tar koden ensam eller inklistrad i en länk/text. Kastar Error om den inte går att läsa.
+export async function parseShareCode(text, today) {
+  const m = /ARSHJUL1\.([A-Za-z0-9_-]+)/.exec(String(text).replace(/\s+/g, ''));
+  if (!m || m[1].length > MAX_CODE) throw new Error('code');
+  const json = new TextDecoder().decode(await squeeze(unb64u(m[1]), new DecompressionStream('deflate-raw')));
+  if (json.length > MAX_JSON) throw new Error('size');
+  const w = sanitize(JSON.parse(json));
+  return { ...w, tasks: w.tasks.map(x => ({ ...x, done: {}, created: today })) };
+}
+
+// Kopia med nya id för hjul, enheter, uppgifter och perioder – krockar aldrig med originalet eller
+// en tidigare kopia. id anges när kopian ska ersätta ett befintligt hjul ("skriv över").
+export function copyWheel(w, id = uid()) {
+  const ids = Object.fromEntries(Object.keys(w.units).map(u => [u, uid()]));
+  const { example, ...rest } = w; // en kopia är aldrig ett exempel
+  return {
+    ...rest,
+    id,
+    units: Object.fromEntries(Object.entries(w.units).map(([u, v]) => [ids[u], v])),
+    tasks: w.tasks.map(x => ({ ...x, id: uid(), units: x.units.map(u => ids[u]) })),
+    periods: w.periods.map(p => ({ ...p, id: uid() })),
+  };
+}
+
+const baseName = w => `minplan-${w.name.replace(/[^\p{L}\p{N}]+/gu, '-') || w.id}`;
+
+export function exportFile(w) {
+  return { name: `${baseName(w)}.json`, blob: new Blob([JSON.stringify(w, null, 2)], { type: 'application/json' }) };
+}
+
+// ---- iCal (RFC 5545): varje uppgift = heldagshändelse som återkommer årligen, påminnelse kl. 9 på startdagen.
+
+const icsText = s => s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[;,]/g, c => '\\' + c);
+const icsDate = d => isoDate(d).replace(/-/g, '');
+const enc = new TextEncoder();
+
+// Rader längre än 75 byte viks; fortsättningsrader börjar med mellanslag.
+function fold(line) {
+  const out = [];
+  let cur = '', n = 0;
+  for (const ch of line) {
+    const b = enc.encode(ch).length;
+    if (n + b > 73) { out.push(cur); cur = ''; n = 0; }
+    cur += ch;
+    n += b;
+  }
+  return [...out, cur].join('\r\n ');
+}
+
+// Tar ett hjul eller en lista av hjul (alla hamnar i samma kalender).
+export function toICS(ws, year, now = new Date()) {
+  ws = [].concat(ws);
+  const stamp = `${now.toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`;
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Arshjul//Arshjul//SV', 'CALSCALE:GREGORIAN',
+    `X-WR-CALNAME:${icsText(ws.map(w => w.name).join(', '))}`];
+  for (const w of ws) for (const x of w.tasks) {
+    const end = endDate(x, year);
+    end.setDate(end.getDate() + 1); // DTEND är exklusivt för heldagshändelser
+    const desc = [x.note, ...x.items.map(i => `☐ ${i}`)].filter(Boolean).join('\n');
+    lines.push('BEGIN:VEVENT', `UID:${x.id}@arshjul`, `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(startDate(x, year))}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
+      'RRULE:FREQ=YEARLY', `SUMMARY:${icsText(x.title)}`);
+    if (desc) lines.push(`DESCRIPTION:${icsText(desc)}`);
+    if (x.units.length) lines.push(`CATEGORIES:${x.units.map(u => icsText(w.units[u].name)).join(',')}`);
+    lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(x.title)}`, 'TRIGGER:PT9H', 'END:VALARM', 'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return `${lines.map(fold).join('\r\n')}\r\n`;
+}
+
+export const exportICS = (ws, year) => ({
+  name: `${[].concat(ws).length === 1 ? baseName([].concat(ws)[0]) : 'minplan'}.ics`,
+  blob: new Blob([toICS(ws, year)], { type: 'text/calendar' }),
+});

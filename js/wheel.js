@@ -22,13 +22,23 @@ function textArc(r, a0, a1) {
 }
 
 // view: { tasks: [{ id, title, start, end, color, dim, late, tip }], year, todayDoy (null = inte i år),
-//         month (vald månad eller null), months: [{ short, long, from, to }], pct, lateCount, t }
+//         month (vald månad eller null), months: [{ short, long, from, to }], pct, lateCount, t,
+//         minR (valfri: minsta radie, så att hjul sida vid sida får samma skala) }
+// Returnerar använd radie.
 export function renderWheel(svg, v) {
   const { lane, count } = assignLanes(v.tasks);
   const outer = R_L0 + count * LANE;
-  const R = Math.max(220, outer + 12);
+  const R = Math.max(220, outer + 12, v.minR ?? 0);
   svg.setAttribute('viewBox', `${-R} ${-R} ${2 * R} ${2 * R}`);
   let defs = '', h = '';
+
+  // Lediga perioder: svag tonad sektor bakom uppgifterna + klickbart band mellan månader och uppgifter.
+  (v.periods || []).forEach(p => {
+    const [s, e] = span(p), a0 = ang(s), a1 = ang(e);
+    h += `<path class="period-bg" d="${sector(R_M1, Math.max(outer, R_L0 + LANE), a0, a1)}"/>
+          <path class="period" d="${sector(R_M1 + 1.5, R_L0 - 1.5, a0, a1)}" data-period="${esc(p.id)}"
+            tabindex="0" role="button" aria-label="${esc(p.tip)}"><title>${esc(p.tip)}</title></path>`;
+  });
 
   v.months.forEach((m, i) => {
     const a0 = ang(m.from), a1 = ang(m.to), [x, y] = pt((R_M0 + R_M1) / 2, (a0 + a1) / 2).split(' ');
@@ -60,4 +70,5 @@ export function renderWheel(svg, v) {
   if (v.lateCount) h += `<text class="center-late" y="29">${esc(v.t('nLate', v.lateCount))}</text>`;
 
   svg.innerHTML = `<defs>${defs}</defs>${h}`;
+  return R;
 }

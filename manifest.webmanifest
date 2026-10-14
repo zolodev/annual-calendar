@@ -1,6 +1,6 @@
 {
-  "name": "Årshjul",
-  "short_name": "Årshjul",
+  "name": "MinPlan",
+  "short_name": "MinPlan",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,4 +1,6 @@
-# Årshjul – arbetsplan
+# MinPlan – arbetsplan
+
+Appen heter **MinPlan** på alla språk (rubrik, flik, manifest, notiser, filnamn). Interna nycklar (`arshjul:` i localStorage, kodprefixet `ARSHJUL1.`) behålls så att sparad data och delade koder fungerar.
 
 Mock-up: `mockup.html` (förhandsvisning: `mockup.png`). Mock-upen är en skiss; datamodellen nedan gäller.
 
@@ -29,14 +31,24 @@ Hjulet är **årslöst**. Alla uppgifter gäller varje år automatiskt – inget
 ```
 Hjul    { format: 1, id, namn, enheter: {id: {namn, färg}}, uppgifter: [] }
 Uppgift { id, enheter: [enhetId], titel, start: "MM-DD", slut: "MM-DD",
-          notering, punkter: [text], klart: { "ÅÅÅÅ": [index] }, skapad: "ÅÅÅÅ-MM-DD" }
+          notering, punkter: [text], klart: { "ÅÅÅÅ": [index] }, skapad: "ÅÅÅÅ-MM-DD",
+          notis: bool }   // notis när försenad; saknas = på
 ```
 - Nycklar på engelska i koden (`name`, `units`, `tasks`, `title`, `items`, `done`, `note`), svenska ovan för läsbarhet.
 - `id` = `crypto.randomUUID()`.
 - `format` = dataformatets version (heltal). Höjs vid ändrad struktur; `store.js` migrerar äldre format vid inläsning.
 - **Inga kategorier.** Färg = enhetens färg (uppgift med flera enheter: första enheten).
 - Ny enhet får slumpad färg: `hsl(random 0–359, 65%, 45%)` – läsbar med vit text i både ljust och mörkt läge. Kan ändras i enhetsdialogen.
-- **Hjul** = en instans (t.ex. "Förvaltning", "Hemma"). Flera hjul, väljs i rubriken. Export = ett hjul som fil.
+- **Hjul** = en instans (t.ex. "Förvaltning", "Hemma"). Export = en fil per hjul.
+
+## Flera hjul i samma vy
+- Hjulchips överst: klick visar/döljer hjulet, dubbelklick visar bara det. Minst ett hjul visas alltid. Valet sparas (`arshjul:shown`).
+- Alla visade hjuls uppgifter, enheter och lediga perioder ritas i **ett gemensamt hjul**. Listan grupperas hjul → enhet.
+- ⋯ på hjulchip och hjulrubrik: byt namn, visa bara detta, exportera, ta bort.
+- Ny uppgift eller period: välj hjul i dialogen (väljaren syns bara när flera hjul visas). Byte av hjul flyttar uppgiften.
+- Dra en uppgift till en enhet i ett annat hjul: uppgiften flyttas dit och får bara den enheten.
+- Visningsval (syns med flera hjul): **◎ Samlat** = ett gemensamt hjul, **◫ Sida vid sida** = ett hjul per årshjul i ett rutnät över hela bredden, listan under. Samma filter, månad och år styr alla hjul; hjulen ritas i samma skala. Valet sparas (`arshjul:layout`).
+- Kalender (.ics) = alla visade hjul i en fil. Notiser gäller alla sparade hjul.
 
 ## Filter
 Två filter som kombineras (OCH):
@@ -90,6 +102,53 @@ test/model.test.js    bun test
 - Listan till höger är huvudvyn för detaljer och fungerar med tangentbord.
 - Försenade bågar får röd streckad kant; mitten visar `x försenade` under "% klart".
 
+## Lediga perioder (semester, lov)
+- `Hjul.periods: [{ id, name, start: "MM-DD", end: "MM-DD", year: null | ÅÅÅÅ }]`. `year: null` = varje år; annars bara det året (lov som flyttar, t.ex. påsklov).
+- Ritas som ett band mellan månadsringen och uppgifterna + en svagt tonad sektor bakom uppgifterna.
+- Visas överst i listan med veckonummer (ISO 8601), t.ex. "Sommarsemester · v. 28–31".
+- Uppgifter som överlappar en period får en märkning med periodens namn.
+- Läggs till via +-menyn; klick på bandet eller i listan öppnar den för ändring/borttagning.
+
+## Kalender (iCal)
+Knappen "Kalender (.ics)" exporterar alla uppgifter i hjulet som heldagshändelser med `RRULE:FREQ=YEARLY` och en påminnelse kl. 9 på startdagen. Importeras i Outlook, Google eller telefonens kalender, så påminnelser fungerar utan server. `UID` = uppgiftens id, så en ny export uppdaterar i stället för att duplicera (i kalendrar som stöder det).
+
+## Notiser
+- 🔔-knapp i sidhuvudet slår på/av. Webbläsaren frågar om tillåtelse vid första klick.
+- När appen öppnas (högst en gång per dag) visas en notis med försenade uppgifter i aktuellt hjul som har "Notis när den är försenad" ikryssat.
+- Notiser när appen är stängd kräver Web Push och en server, och väntar till central drift.
+
+## Bekräftelser
+Bekräftelser och felmeddelanden visas i sidan (`<dialog>` och en toast), inte med `confirm()`/`alert()`, som blockeras i inbäddade vyer.
+
+## Tema
+Knapp i sidhuvudet: system ◐ → ljust ☀ → mörkt ☾. Sätter `data-theme` på `<html>`, valet sparas.
+
+## Inställningar (⚙)
+Globala, sparas i webbläsaren och gäller direkt:
+- **Utseende:** textstorlek 90–160 % (`--fs`, skalar all text utom hjulets etiketter), sidbredd normal 1200 px / bred 1600 px / hela skärmen (`--page-max`), fördelning hjul/lista (`--c1`/`--c2`, standard lika stora), tema, språk.
+- **Hjul:** vilka hjul som visas, samlat/sida vid sida, lägg till från kod.
+- **Enheter:** öppnar enhetsdialogen. **Notiser:** på/av.
+
+## Exempel som start
+- Första start (inga hjul sparade): appen skapar exempelhjulen från `js/example.js` (Förvaltning, Hemma; sv/en), markerade `example: true`. Bockar sätts relativt innevarande år, så exemplet visar klart, pågående och försenat.
+- **+ Nytt hjul** öppnar en dialog: namn, börja med *ett tomt hjul* eller *en kopia av exemplet* (utan bockar), och om det finns exempelhjul en förvald ruta *Ta bort exempelhjulen först*.
+- En kopia (import, mall) är aldrig ett exempel – bara de ursprungliga exempelhjulen rensas.
+
+## Import (fil eller kod)
+Både Importera (.json) och Från kod leder till samma val:
+- **Lägg till som eget hjul med alla uppgifter** (standard).
+- **Skriv över ett befintligt hjul helt** – välj hjul (samma hjul som exporterades förväljs), bekräftelse krävs.
+Importerat innehåll får alltid nya id för enheter, uppgifter och perioder. En fil behåller sina bockar (backup), en kod har inga.
+
+## Dela med kod
+- ⋯ på ett hjul → "Dela…": koden är hjulets JSON, deflate-komprimerad och base64url, med prefixet `ARSHJUL1.`. Ingen server.
+- Bockar följer inte med. Mottagaren lägger till via "⇩ Från kod" (eller skriver över ett hjul, se Import) och får ett **eget** hjul: nya id för hjul, enheter, uppgifter och perioder (krockar inte med originalet eller en tidigare kopia), `created` = idag så att inget blir försenat direkt. Allt valideras med `sanitize()`.
+- Länk `…#import=ARSHJUL1.…` öppnar dialogen med koden ifylld (visas bara när appen körs på egen adress).
+- Engångskopia: senare ändringar synkas inte (kräver central drift).
+
+## Datumfält
+Alltid `ÅÅÅÅ-MM-DD` oavsett webbläsarens språk: textfält (inte `type="date"`, som visar lokalt format) + 📅-knapp som öppnar webbläsarens datumväljare via en dold date-input (`showPicker()`). `20260315` rättas till `2026-03-15`. Ogiltiga datum (t.ex. `2026-02-31`) avvisas med ett tydligt meddelande.
+
 ## Sök
 Enkel `includes()` på titel, notering och punkter, efter `toLowerCase()` + `normalize('NFD')` (å/ä/ö matchar a/o).
 
@@ -102,4 +161,5 @@ Enkel `includes()` på titel, notering och punkter, efter `toLowerCase()` + `nor
 
 ## Senare (inte nu)
 - Central drift: samma statiska filer på en webbserver; `store.js` byts mot REST-anrop.
-- Web Share API, iCal-export.
+- Web Share API.
+- Web Push (notiser när appen är stängd) via den centrala servern.

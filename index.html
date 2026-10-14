@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'">
   <meta name="theme-color" content="#2563eb">
-  <title>Årshjul</title>
+  <title>MinPlan</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/app.css">
@@ -16,23 +16,25 @@
 
 <body>
   <header>
-    <h1 data-i18n="appName">Årshjul</h1>
-    <select id="wheel-select" data-i18n-title="wheel"></select>
-    <button id="btn-wheel" class="icon" data-i18n-title="wheelSettings">⚙</button>
+    <h1 data-i18n="appName">MinPlan</h1>
     <input id="search" type="search" data-i18n-ph="search">
-    <button id="btn-add" class="primary" data-i18n="addTask"></button>
     <button id="btn-export" data-i18n="export"></button>
+    <button id="btn-ics" data-i18n="calendar" data-i18n-title="calendarHint"></button>
     <label class="btn"><span data-i18n="import"></span><input id="file" type="file" accept=".json,application/json" hidden></label>
+    <button id="btn-notify" class="icon" hidden></button>
+    <button id="btn-theme" class="icon"></button>
     <button id="btn-lang"></button>
+    <button id="btn-settings" class="icon" data-i18n-title="settings">⚙</button>
   </header>
 
   <nav class="filters">
+    <div id="wheels" class="chips wheels"></div>
     <div id="chips" class="chips"></div>
     <div id="status" class="seg" role="group" data-i18n-title="status"></div>
   </nav>
 
-  <main>
-    <section class="card"><svg id="wheel" role="group" data-i18n-title="appName"></svg></section>
+  <main id="main">
+    <section class="card" id="wheel-area"></section>
     <section class="card" id="panel" aria-live="polite"></section>
   </main>
 
@@ -42,9 +44,10 @@
     <form id="form-task">
       <h2 id="task-heading"></h2>
       <label><span data-i18n="title"></span><input name="title" required></label>
+      <label hidden><span data-i18n="wheel"></span><select name="wheel"></select></label>
       <div class="row">
-        <label><span data-i18n="start"></span><input name="start" type="date" required></label>
-        <label><span data-i18n="end"></span><input name="end" type="date" required></label>
+        <label><span data-i18n="start"></span><input name="start" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
+        <label><span data-i18n="end"></span><input name="end" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
       </div>
       <small class="muted" data-i18n="wrapHint"></small>
       <fieldset>
@@ -53,6 +56,7 @@
       </fieldset>
       <label><span data-i18n="note"></span><textarea name="note" rows="2"></textarea></label>
       <label><span data-i18n="checklist"></span><textarea name="items" rows="5" data-i18n-ph="checklistHint"></textarea></label>
+      <label class="check"><input type="checkbox" name="notify"><span data-i18n="notifyTask"></span></label>
       <div class="actions">
         <button type="button" id="task-delete" class="danger" data-i18n="delete"></button>
         <span class="spacer"></span>
@@ -64,12 +68,30 @@
 
   <dialog id="dlg-units">
     <h2 data-i18n="manageUnits"></h2>
+    <p class="muted hint" data-i18n="unitsHint"></p>
     <div id="unit-list"></div>
     <div class="actions">
-      <button type="button" id="unit-add" data-i18n="newUnit"></button>
       <span class="spacer"></span>
       <button type="button" class="primary" data-close data-i18n="close"></button>
     </div>
+  </dialog>
+
+  <dialog id="dlg-new">
+    <form id="form-new">
+      <h2 data-i18n="newWheelTitle"></h2>
+      <label><span data-i18n="wheelName"></span><input name="name" required></label>
+      <fieldset>
+        <legend data-i18n="startWith"></legend>
+        <label class="check"><input type="radio" name="from" value="empty" checked><span data-i18n="startEmpty"></span></label>
+        <label class="check"><input type="radio" name="from" value="example"><span data-i18n="startExample"></span></label>
+      </fieldset>
+      <label class="check" id="clear-box"><input type="checkbox" name="clear" checked><span id="clear-text"></span></label>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" data-close data-i18n="cancel"></button>
+        <button class="primary" data-i18n="create"></button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="dlg-wheel">
@@ -84,6 +106,125 @@
       </div>
     </form>
   </dialog>
+  <dialog id="dlg-period">
+    <form id="form-period">
+      <h2 id="period-heading"></h2>
+      <label><span data-i18n="periodName"></span><input name="name" required data-i18n-ph="periodPh"></label>
+      <label hidden><span data-i18n="wheel"></span><select name="wheel"></select></label>
+      <div class="row">
+        <label><span data-i18n="start"></span><input name="start" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
+        <label><span data-i18n="end"></span><input name="end" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
+      </div>
+      <small class="muted" id="period-weeks"></small>
+      <label class="check"><input type="checkbox" name="recurring"><span data-i18n="recurring"></span></label>
+      <small class="muted" data-i18n="recurringHint"></small>
+      <div class="actions">
+        <button type="button" id="period-delete" class="danger" data-i18n="delete"></button>
+        <span class="spacer"></span>
+        <button type="button" data-close data-i18n="cancel"></button>
+        <button class="primary" data-i18n="save"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-settings">
+    <form id="form-settings">
+      <h2 data-i18n="settings"></h2>
+      <fieldset>
+        <legend data-i18n="appearance"></legend>
+        <label><span data-i18n="textSize"></span>
+          <span class="range"><input type="range" name="fs" min="90" max="160" step="10"><output id="fs-out"></output></span></label>
+        <label><span data-i18n="pageWidth"></span><select name="width">
+          <option value="normal" data-i18n="widthNormal"></option><option value="wide" data-i18n="widthWide"></option>
+          <option value="full" data-i18n="widthFull"></option></select></label>
+        <label><span data-i18n="cols"></span><select name="cols">
+          <option value="wheel" data-i18n="colsWheel"></option><option value="even" data-i18n="colsEven"></option>
+          <option value="list" data-i18n="colsList"></option></select></label>
+        <label><span data-i18n="themeLabel"></span><select name="theme">
+          <option value="auto" data-i18n="themeOptAuto"></option><option value="light" data-i18n="themeOptLight"></option>
+          <option value="dark" data-i18n="themeOptDark"></option></select></label>
+        <label><span data-i18n="language"></span><select name="lang">
+          <option value="sv">Svenska</option><option value="en">English</option></select></label>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="wheels"></legend>
+        <div id="set-wheels" class="checks"></div>
+        <button type="button" id="set-code" data-i18n="addFromCode"></button>
+        <label><span data-i18n="layout"></span><select name="layout">
+          <option value="merged" data-i18n="merged"></option><option value="split" data-i18n="split"></option></select></label>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="units"></legend>
+        <button type="button" id="set-units" data-i18n="manageUnits"></button>
+      </fieldset>
+      <fieldset id="set-notify-box">
+        <legend data-i18n="notifications"></legend>
+        <label class="check"><input type="checkbox" name="notify"><span data-i18n="notifySetting"></span></label>
+      </fieldset>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="primary" data-close data-i18n="close"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-share">
+    <h2 data-i18n="shareTitle"></h2>
+    <p class="muted hint" data-i18n="shareHint"></p>
+    <textarea id="share-code" class="code" rows="6" readonly></textarea>
+    <div class="actions">
+      <button type="button" id="share-link" data-i18n="copyLink"></button>
+      <span class="spacer"></span>
+      <button type="button" data-close data-i18n="close"></button>
+      <button type="button" id="share-copy" class="primary" data-i18n="copyCode"></button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-code">
+    <form id="form-code">
+      <h2 data-i18n="addFromCode"></h2>
+      <p class="muted hint" data-i18n="codeHint"></p>
+      <textarea name="code" class="code" rows="6" required data-i18n-ph="codePh"></textarea>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" data-close data-i18n="cancel"></button>
+        <button class="primary" data-i18n="next"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-import">
+    <form id="form-import">
+      <h2 data-i18n="importTitle"></h2>
+      <p id="import-summary"></p>
+      <label class="check"><input type="radio" name="mode" value="add" checked><span data-i18n="importAdd"></span></label>
+      <label class="check"><input type="radio" name="mode" value="replace"><span data-i18n="importReplace"></span></label>
+      <label><span data-i18n="importTarget"></span><select name="target" disabled></select></label>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" data-close data-i18n="cancel"></button>
+        <button class="primary" data-i18n="import"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-confirm">
+    <form method="dialog">
+      <p id="confirm-text"></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button value="no" data-i18n="cancel"></button>
+        <button value="yes" class="primary" data-i18n="confirm"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="fab" class="fab-wrap">
+    <div id="fab-menu" class="fab-menu" role="menu" inert></div>
+    <button id="fab-btn" class="fab" aria-haspopup="menu" aria-expanded="false" data-i18n-title="addTask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
 </body>
 
 </html>
