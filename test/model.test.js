@@ -292,3 +292,14 @@ test('påminnelser: från N dagar före till slutet, inte klara, en nyckel per f
   expect(on(new Date(2026, 11, 21))).toEqual(['w/p/2026:0']);
   expect(on(new Date(2027, 0, 10))).toEqual(['w/p/2026:-20']); // pågår över årsskiftet
 });
+
+test('import från inklistrad text: JSON, JSON med krokiga citattecken, delningskod', async () => {
+  const { parseText } = await import('../js/store.js');
+  const w = { format: 1, id: 'w', name: 'Hem', units: {}, tasks: [task({ done: { 2026: [0] } })], periods: [] };
+  const json = JSON.stringify(w, null, 2);
+  expect((await parseText(json, '2026-10-18')).tasks[0].done).toEqual({ 2026: [0] }); // som fil: bockar följer med
+  expect((await parseText(json.replace(/"/g, (_, i) => (i % 2 ? '”' : '“')), '2026-10-18')).name).toBe('Hem');
+  const code = await shareCode(w);
+  expect((await parseText(`Här: ${code}`, '2026-10-18')).tasks[0].created).toBe('2026-10-18');
+  await expect(parseText('hej', '2026-10-18')).rejects.toThrow();
+});

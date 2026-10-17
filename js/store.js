@@ -112,6 +112,16 @@ export function pref(k, v) {
 
 export const parseImport = text => sanitize(JSON.parse(text));
 
+// Inklistrad text: en delningskod (ARSHJUL1.…) eller innehållet i en exporterad fil (JSON).
+// Telefoner byter ibland " mot “ ” när man klistrar via anteckningar – prova då med raka citattecken.
+export async function parseText(text, today) {
+  if (/ARSHJUL1\./.test(text)) return parseShareCode(text, today);
+  try { return parseImport(text); } catch (e) {
+    if (!/[“”„″]/.test(text)) throw e;
+    return parseImport(text.replace(/[“”„″]/g, '"'));
+  }
+}
+
 // ---- Delningskod: hjulet som komprimerad text (deflate + base64url), ingen server behövs.
 // Koden saknar bockar och "skapad" sätts till idag (inget blir försenat direkt hos mottagaren).
 

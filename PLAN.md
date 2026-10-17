@@ -155,6 +155,7 @@ Globala, sparas i webbläsaren och gäller direkt:
 - En kopia (import, mall) är aldrig ett exempel.
 
 ## Import (fil eller kod)
+Knappen Importera (och ⇩ Importera vid hjulen) öppnar en dialog med en textruta: klistra in en delningskod, en länk eller texten från en exporterad fil (JSON), eller välj en fil. Inklistrad JSON behandlas som en fil (bockar följer med). Krokiga citattecken (“ ”) från telefonens anteckningar rättas om JSON annars inte går att läsa.
 Både Importera (.json) och Från kod leder till samma val:
 - **Lägg till som eget hjul med alla uppgifter** (standard).
 - **Skriv över ett befintligt hjul helt** – välj hjul (samma hjul som exporterades förväljs), bekräftelse krävs.

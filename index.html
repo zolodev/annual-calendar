@@ -20,7 +20,7 @@
     <input id="search" type="search" data-i18n-ph="search">
     <button id="btn-export" data-i18n="export"></button>
     <button id="btn-ics" data-i18n="calendar" data-i18n-title="calendarHint"></button>
-    <label class="btn"><span data-i18n="import"></span><input id="file" type="file" accept=".json,application/json" hidden></label>
+    <button id="btn-import" data-i18n="import"></button>
     <button id="btn-notify" class="icon" hidden></button>
     <button id="btn-theme" class="icon"></button>
     <button id="btn-lang"></button>
@@ -209,6 +209,7 @@
       <p class="muted hint" data-i18n="codeHint"></p>
       <textarea name="code" class="code" rows="6" required data-i18n-ph="codePh"></textarea>
       <div class="actions">
+        <label class="btn"><span data-i18n="pickFile"></span><input id="file" type="file" accept=".json,application/json" hidden></label>
         <span class="spacer"></span>
         <button type="button" data-close data-i18n="cancel"></button>
         <button class="primary" data-i18n="next"></button>

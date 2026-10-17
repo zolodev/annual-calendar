@@ -1012,12 +1012,14 @@ $('btn-export').addEventListener('click', () => exportWheels(shown));
 // Alla visade hjul i en och samma kalenderfil.
 $('btn-ics').addEventListener('click', () => download(store.exportICS(shown, NOW_YEAR)));
 
+$('btn-import').addEventListener('click', () => openCode());
 $('file').addEventListener('change', async e => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
   let w;
   try { w = store.parseImport(await file.text()); } catch { return notify(t('importFailed')); }
+  $('dlg-code').close();
   openImport(w);
 });
 
@@ -1090,10 +1092,12 @@ $('set-code').addEventListener('click', () => openCode());
 $('form-code').addEventListener('submit', async e => {
   e.preventDefault();
   let w;
-  try { w = await store.parseShareCode(e.target.elements.code.value, isoDate(new Date())); } catch { return notify(t('badCode')); }
+  try { w = await store.parseText(e.target.elements.code.value, isoDate(new Date())); } catch { return notify(t('badCode')); }
   $('dlg-code').close();
   openImport(w);
 });
+
+// Importdialogen tar en delningskod, inklistrad JSON (exporterad fil) eller en vald fil.
 
 // Delad länk (…#import=ARSHJUL1.…): öppna dialogen med koden ifylld och rensa adressen.
 function importFromHash() {
