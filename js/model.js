@@ -40,8 +40,32 @@ export function dateOf(md, y) {
   const [m, d] = parts(md);
   return new Date(y, m - 1, m === 2 && d === 29 && !leap(y) ? 28 : d);
 }
-export const startDate = (t, y) => dateOf(t.start, y);
-export const endDate = (t, y) => dateOf(t.end, wraps(t) ? y + 1 : y);
+const md = d => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Veckoregel { month: 1–12, nth: 1–4 | -1 (sista) | -2 (näst sista), weeks: 1–26 }:
+// perioden börjar på månadens n:e måndag och varar hela veckor (måndag–söndag).
+// T.ex. sista veckan i oktober = { month: 10, nth: -1, weeks: 1 }.
+export const NTHS = [1, 2, 3, 4, -2, -1];
+export const validRule = r => !!r && Number.isInteger(r.month) && r.month >= 1 && r.month <= 12 &&
+  NTHS.includes(r.nth) && Number.isInteger(r.weeks) && r.weeks >= 1 && r.weeks <= 26;
+export function ruleStart(r, y) {
+  const first = new Date(y, r.month - 1, 1), days = new Date(y, r.month, 0).getDate();
+  const mondays = [];
+  for (let d = 1 + ((8 - first.getDay()) % 7); d <= days; d += 7) mondays.push(d);
+  return new Date(y, r.month - 1, mondays.at(r.nth > 0 ? r.nth - 1 : r.nth));
+}
+// Uppgiften/perioden med start och slut (MM-DD) för år y. Utan veckoregel: oförändrad.
+export function inYear(t, y) {
+  if (!t.rule) return t;
+  const s = ruleStart(t.rule, y), e = new Date(s);
+  e.setDate(e.getDate() + 7 * t.rule.weeks - 1);
+  return { ...t, start: md(s), end: md(e) };
+}
+export const startDate = (t, y) => dateOf(inYear(t, y).start, y);
+export function endDate(t, y) {
+  const r = inYear(t, y);
+  return dateOf(r.end, wraps(r) ? y + 1 : y);
+}
 
 // ISO 8601-veckonummer (måndag först, vecka 1 innehåller årets första torsdag).
 export function isoWeek(d) {
@@ -81,6 +105,26 @@ export function overdueYear(t, now = new Date()) {
     if (end < today) return end >= created && !isDone(t, y) ? y : null;
   }
   return null;
+}
+
+// Påminnelser som gäller idag: från "remind" dagar före start till och med sista dagen,
+// för uppgifter (inte klara det året) och perioder (som gäller det året). key är unik per förekomst.
+export function dueReminders(ws, now = new Date()) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()), Y = today.getFullYear(), out = [];
+  for (const w of ws) {
+    for (const x of [...w.tasks, ...w.periods]) {
+      if (!Number.isInteger(x.remind)) continue;
+      const task = 'title' in x;
+      for (const y of [Y - 1, Y, Y + 1]) {
+        if (!task && x.year !== null && x.year !== y) continue;
+        const s = startDate(x, y), from = new Date(s);
+        from.setDate(from.getDate() - x.remind);
+        if (today < from || today > endDate(x, y) || (task && isDone(x, y))) continue;
+        out.push({ key: `${w.id}/${x.id}/${y}`, name: task ? x.title : x.name, start: s, days: Math.round((s - today) / 864e5) });
+      }
+    }
+  }
+  return out;
 }
 
 // Lägg uppgifter i ringar så att de inte krockar. Inget tak på antal ringar.

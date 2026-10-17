@@ -44,18 +44,29 @@
     <form id="form-task">
       <h2 id="task-heading"></h2>
       <label><span data-i18n="title"></span><input name="title" required></label>
-      <label hidden><span data-i18n="wheel"></span><select name="wheel"></select></label>
-      <div class="row">
+      <label><span data-i18n="repeat"></span><select name="repeat">
+        <option value="date" data-i18n="repeatDate"></option><option value="weeks" data-i18n="repeatWeeks"></option></select></label>
+      <div class="row when-date">
         <label><span data-i18n="start"></span><input name="start" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
         <label><span data-i18n="end"></span><input name="end" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
       </div>
-      <small class="muted" data-i18n="wrapHint"></small>
+      <div class="row when-rule" hidden>
+        <label><span data-i18n="ruleFrom"></span><select name="nth"></select></label>
+        <label><span data-i18n="ruleMonth"></span><select name="rmonth"></select></label>
+        <label class="narrow"><span data-i18n="ruleWeeks"></span><input name="rweeks" type="number" min="1" max="26" inputmode="numeric"></label>
+      </div>
+      <small class="muted when-hint"></small>
       <fieldset>
         <legend data-i18n="units"></legend>
-        <div id="task-units" class="checks"></div>
+        <div id="task-units"></div>
+        <small class="muted" id="task-units-hint" data-i18n="copiesHint"></small>
       </fieldset>
       <label><span data-i18n="note"></span><textarea name="note" rows="2"></textarea></label>
       <label><span data-i18n="checklist"></span><textarea name="items" rows="5" data-i18n-ph="checklistHint"></textarea></label>
+      <div class="remind">
+        <label class="check"><input type="checkbox" name="remind"><span data-i18n="remindMe"></span></label>
+        <label class="check"><input name="remindDays" type="number" min="0" max="365" inputmode="numeric"><span data-i18n="daysBefore"></span></label>
+      </div>
       <label class="check"><input type="checkbox" name="notify"><span data-i18n="notifyTask"></span></label>
       <div class="actions">
         <button type="button" id="task-delete" class="danger" data-i18n="delete"></button>
@@ -86,6 +97,7 @@
         <label class="check"><input type="radio" name="from" value="example"><span data-i18n="startExample"></span></label>
       </fieldset>
       <label class="check" id="clear-box"><input type="checkbox" name="clear" checked><span id="clear-text"></span></label>
+      <small class="muted" id="clear-kept"></small>
       <div class="actions">
         <span class="spacer"></span>
         <button type="button" data-close data-i18n="cancel"></button>
@@ -111,13 +123,24 @@
       <h2 id="period-heading"></h2>
       <label><span data-i18n="periodName"></span><input name="name" required data-i18n-ph="periodPh"></label>
       <label hidden><span data-i18n="wheel"></span><select name="wheel"></select></label>
-      <div class="row">
+      <label><span data-i18n="repeat"></span><select name="repeat">
+        <option value="date" data-i18n="repeatDate"></option><option value="weeks" data-i18n="repeatWeeks"></option></select></label>
+      <div class="row when-date">
         <label><span data-i18n="start"></span><input name="start" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
         <label><span data-i18n="end"></span><input name="end" class="date" required maxlength="10" inputmode="numeric" autocomplete="off" data-i18n-ph="dateFmt"></label>
       </div>
-      <small class="muted" id="period-weeks"></small>
+      <div class="row when-rule" hidden>
+        <label><span data-i18n="ruleFrom"></span><select name="nth"></select></label>
+        <label><span data-i18n="ruleMonth"></span><select name="rmonth"></select></label>
+        <label class="narrow"><span data-i18n="ruleWeeks"></span><input name="rweeks" type="number" min="1" max="26" inputmode="numeric"></label>
+      </div>
+      <small class="muted when-hint"></small>
       <label class="check"><input type="checkbox" name="recurring"><span data-i18n="recurring"></span></label>
       <small class="muted" data-i18n="recurringHint"></small>
+      <div class="remind">
+        <label class="check"><input type="checkbox" name="remind"><span data-i18n="remindMe"></span></label>
+        <label class="check"><input name="remindDays" type="number" min="0" max="365" inputmode="numeric"><span data-i18n="daysBefore"></span></label>
+      </div>
       <div class="actions">
         <button type="button" id="period-delete" class="danger" data-i18n="delete"></button>
         <span class="spacer"></span>

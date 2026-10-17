@@ -184,7 +184,7 @@ h3 { font-size: calc(13px * var(--fs)); text-transform: uppercase; letter-spacin
 .group-head .late-count { color: var(--late); font-weight: 600; }
 .group-name { overflow-wrap: anywhere; }
 .drop-hint { margin: 0; font-size: calc(13px * var(--fs)); color: var(--muted); }
-.is-dragging [data-drop-unit] { border-color: var(--line); }
+.is-dragging :is([data-drop-unit], [data-drop-wheel]) { border-color: var(--line); }
 .is-dragging .chip[data-drop-unit] { border-style: dashed; border-color: var(--accent); }
 .drop-over, .is-dragging .drop-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .dragging { opacity: .4; }
@@ -280,6 +280,15 @@ legend { font-size: calc(13px * var(--fs)); color: var(--muted); padding: 0 4px;
 .range input { flex: 1; }
 .range output { min-width: 3.5em; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+/* Grupper per hjul i uppgiftsdialogen: hjulet som rubrik-kryssruta, grupperna indragna under. */
+.pick-wheel + .pick-wheel { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.pick-wheel .checks { padding-left: 24px; }
+dialog .row.when-rule { flex-wrap: wrap; }
+dialog .row.when-rule label { flex: 1 1 9em; }
+dialog .row.when-rule label.narrow { flex: 0 0 6.5em; }
+.remind { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.remind input[type=number] { width: 4.5em; padding: 6px 8px; }
+.remind input:disabled + span { color: var(--muted); }
 dialog label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: calc(15px * var(--fs)); }
 .actions { display: flex; gap: 8px; margin-top: 8px; }
 .spacer { flex: 1; }
@@ -303,6 +312,18 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; color: 
   gap: 14px;
   pointer-events: none; /* den dolda menyn får inte blockera klick på sidan */
 }
+/* Mörk bakgrund bakom öppen meny så att valen går att läsa ovanpå hjulet och listan. */
+.fab-wrap::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgb(0 0 0 / .6);
+  opacity: 0;
+  transition: opacity .2s;
+  pointer-events: none;
+}
+.fab-wrap.open::before { opacity: 1; pointer-events: auto; }
 .fab {
   pointer-events: auto;
   width: 64px;
@@ -364,8 +385,9 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; color: 
   border-radius: 8px;
   background: var(--card);
   color: var(--text);
-  font-size: calc(14px * var(--fs));
-  box-shadow: 0 4px 12px rgb(0 0 0 / .12);
+  font-size: calc(15px * var(--fs));
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgb(0 0 0 / .3);
 }
 .fab-mini {
   width: 46px;
@@ -386,7 +408,7 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; color: 
 .fab-item.ghost .fab-mini { background: var(--card); color: var(--muted); border: 2px dashed var(--muted); font-size: 18px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .fab, .fab svg, .fab-item, .fab-mini { transition: none !important; }
+  .fab, .fab svg, .fab-item, .fab-mini, .fab-wrap::before { transition: none !important; }
 }
 
 @media print {
@@ -395,4 +417,10 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; color: 
   main { grid-template-columns: 1fr; }
   .card { border: none; break-inside: avoid; }
   .todo { break-inside: avoid; }
+}
+
+/* iPhone zoomar in när man trycker i ett fält med text under 16px. Håll fälten på minst 16px på pekskärmar
+   (zoom med två fingrar fungerar som vanligt). */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: max(16px, calc(15px * var(--fs))) !important; }
 }

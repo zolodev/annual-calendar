@@ -1,6 +1,6 @@
 // Lagring i localStorage + validering av data (vid inläsning och import).
 // Litet gränssnitt (list/load/save/remove) så att det kan bytas mot en server senare.
-import { validMD, randomColor, uid, startDate, endDate, isoDate } from './model.js';
+import { validMD, validRule, randomColor, uid, startDate, endDate, isoDate } from './model.js';
 
 export const FORMAT = 1; // dataformatets version – höj och migrera i sanitize() vid ändrad struktur
 
@@ -14,6 +14,16 @@ const DATE = /^\d{4}-\d\d-\d\d$/;
 const str = v => (typeof v === 'string' ? v : '');
 const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const arr = v => (Array.isArray(v) ? v : []);
+
+// Valfria fält på uppgifter och perioder (saknas i äldre data = ingen veckoregel, ingen påminnelse):
+// rule = veckoregel (start/end finns kvar som datum för ett år, så att äldre versioner kan läsa hjulet),
+// remind = påminnelse antal dagar före start (0 = samma dag).
+function when(x) {
+  const out = {};
+  if (validRule(x.rule)) out.rule = { month: x.rule.month, nth: x.rule.nth, weeks: x.rule.weeks };
+  if (Number.isInteger(x.remind) && x.remind >= 0 && x.remind <= 365) out.remind = x.remind;
+  return out;
+}
 
 // Bygger ett rent hjul av okänd indata. Okända fält kastas. Kastar Error om formatet är fel.
 export function sanitize(raw) {
@@ -39,6 +49,7 @@ export function sanitize(raw) {
         .map(([y, v]) => [y, [...new Set(v.filter(Number.isInteger))]])),
       created: DATE.test(t.created) ? t.created : '1970-01-01',
       notify: t.notify !== false, // notis när försenad (saknas = på)
+      ...when(t),
     }));
   // Lediga perioder (semester, lov). year = null: varje år, annars bara det året.
   const periods = arr(raw.periods)
@@ -49,14 +60,17 @@ export function sanitize(raw) {
       start: p.start,
       end: p.end,
       year: Number.isInteger(p.year) && p.year >= 1000 && p.year <= 9999 ? p.year : null,
+      ...when(p),
     }));
   const w = { format: FORMAT, id: ID.test(raw.id) ? raw.id : uid(), name: str(raw.name), units, tasks, periods };
   if (raw.example === true) w.example = true; // exempelhjul (kan rensas när man skapar ett eget)
   return w;
 }
 
+// Nytt hjul. Utan unitName skapas det utan enheter.
 export function newWheel(name, unitName) {
-  return { format: FORMAT, id: uid(), name, units: { [uid()]: { name: unitName, color: randomColor() } }, tasks: [], periods: [] };
+  const units = unitName ? { [uid()]: { name: unitName, color: randomColor() } } : {};
+  return { format: FORMAT, id: uid(), name, units, tasks: [], periods: [] };
 }
 
 export function list() {
@@ -72,8 +86,17 @@ export function list() {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Data från en nyare version (högre format) eller trasig JSON läses inte – men tas aldrig bort.
 export function load(id) {
-  try { return sanitize(JSON.parse(localStorage.getItem(KEY(id)))); } catch { return null; }
+  try {
+    const text = localStorage.getItem(KEY(id)), raw = JSON.parse(text), w = sanitize(raw);
+    // Om valideringen tappade något (trasig uppgift, period eller enhet) sparas originalet orört först,
+    // så att inget försvinner för gott när hjulet sparas nästa gång.
+    const lost = arr(raw.tasks).length !== w.tasks.length || arr(raw.periods).length !== w.periods.length ||
+      Object.keys(obj(raw.units)).length !== Object.keys(w.units).length;
+    if (lost && localStorage.getItem(`${P}backup:${id}`) === null) localStorage.setItem(`${P}backup:${id}`, text);
+    return w;
+  } catch { return null; }
 }
 
 export const save = w => localStorage.setItem(KEY(w.id), JSON.stringify(w));
@@ -140,7 +163,8 @@ export function exportFile(w) {
   return { name: `${baseName(w)}.json`, blob: new Blob([JSON.stringify(w, null, 2)], { type: 'application/json' }) };
 }
 
-// ---- iCal (RFC 5545): varje uppgift = heldagshändelse som återkommer årligen, påminnelse kl. 9 på startdagen.
+// ---- iCal (RFC 5545): varje uppgift = heldagshändelse som återkommer årligen, påminnelse kl. 9 på startdagen
+// (eller remind dagar före). Veckoregel blir t.ex. BYMONTH=10;BYDAY=-1MO (sista måndagen i oktober).
 
 const icsText = s => s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[;,]/g, c => '\\' + c);
 const icsDate = d => isoDate(d).replace(/-/g, '');
@@ -171,10 +195,10 @@ export function toICS(ws, year, now = new Date()) {
     const desc = [x.note, ...x.items.map(i => `☐ ${i}`)].filter(Boolean).join('\n');
     lines.push('BEGIN:VEVENT', `UID:${x.id}@arshjul`, `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${icsDate(startDate(x, year))}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
-      'RRULE:FREQ=YEARLY', `SUMMARY:${icsText(x.title)}`);
+      `RRULE:FREQ=YEARLY${x.rule ? `;BYMONTH=${x.rule.month};BYDAY=${x.rule.nth}MO` : ''}`, `SUMMARY:${icsText(x.title)}`);
     if (desc) lines.push(`DESCRIPTION:${icsText(desc)}`);
     if (x.units.length) lines.push(`CATEGORIES:${x.units.map(u => icsText(w.units[u].name)).join(',')}`);
-    lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(x.title)}`, 'TRIGGER:PT9H', 'END:VALARM', 'END:VEVENT');
+    lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(x.title)}`, `TRIGGER:${x.remind ? `-PT${x.remind * 24 - 9}H` : 'PT9H'}`, 'END:VALARM', 'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
   return `${lines.map(fold).join('\r\n')}\r\n`;

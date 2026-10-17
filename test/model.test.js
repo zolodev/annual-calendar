@@ -1,6 +1,6 @@
 // Kör: bun test
 import { test, expect } from 'bun:test';
-import { validISO, isoWeek, doy, span, overlaps, monthSpan, isDone, overdueYear, assignLanes, esc, matches, randomColor, validMD } from '../js/model.js';
+import { validISO, isoWeek, doy, span, overlaps, monthSpan, isDone, overdueYear, assignLanes, esc, matches, randomColor, validMD, ruleStart, inYear, startDate, endDate, isoDate, dueReminders } from '../js/model.js';
 import { sanitize, toICS, shareCode, parseShareCode, copyWheel } from '../js/store.js';
 
 const task = o => ({ id: 'a', title: 'T', units: [], start: '10-01', end: '10-31', note: '', items: [], done: {}, created: '2020-01-01', ...o });
@@ -199,4 +199,96 @@ test('exempelhjulen är giltiga i båda språken', async () => {
     }
     expect(ws[0].tasks.some(x => overdueYear(x, new Date(2026, 9, 14)) === 2025)).toBe(true); // visar försenat
   }
+});
+
+test('bara oförändrade exempel får rensas; oanvänt standardhjul känns igen', async () => {
+  const { exampleWheels, isPristineExample, isUnusedDefault } = await import('../js/example.js');
+  const [ex] = exampleWheels('sv').map(sanitize);
+  expect(isPristineExample(ex)).toBe(true);
+  const ticked = { ...ex, tasks: ex.tasks.map(x => ({ ...x, done: { 2030: [0] } })) };
+  expect(isPristineExample(ticked)).toBe(true); // bockar räknas inte som ändring
+  expect(isPristineExample({ ...ex, tasks: [...ex.tasks, { ...ex.tasks[0], id: 'egen' }] })).toBe(false); // egen uppgift
+  expect(isPristineExample({ ...ex, tasks: ex.tasks.map((x, i) => (i ? x : { ...x, title: 'Ändrad' })) })).toBe(false);
+  expect(isPristineExample({ ...ex, periods: [...ex.periods, { id: 'x', name: 'Påsklov', start: '04-01', end: '04-05', year: null }] })).toBe(false);
+  expect(isPristineExample({ ...ex, example: undefined })).toBe(false);
+  expect(isPristineExample({ id: 'std', example: true, tasks: [], periods: [] })).toBe(true); // tomt (f.d. standardhjul)
+
+  const std = { name: 'My annual wheel', units: { a: { name: 'Me', color: '#000000' } }, tasks: [], periods: [] };
+  expect(isUnusedDefault(std)).toBe(true);
+  expect(isUnusedDefault({ ...std, tasks: [{}] })).toBe(false);
+  expect(isUnusedDefault({ ...std, name: 'Jobbet' })).toBe(false);
+  expect(isUnusedDefault({ ...std, units: { ...std.units, b: { name: 'IT', color: '#000000' } } })).toBe(false);
+  expect(isUnusedDefault({ ...std, units: { a: { name: 'Kalle', color: '#000000' } } })).toBe(false);
+});
+
+test('bakåtkompatibelt: trasig post sparas undan, nyare format läses inte men tas inte bort', async () => {
+  const mem = new Map();
+  globalThis.localStorage = {
+    getItem: k => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: k => mem.delete(k), key: i => [...mem.keys()][i], get length() { return mem.size; },
+  };
+  const { load, list } = await import('../js/store.js');
+  const raw = JSON.stringify({ format: 1, id: 'a', name: 'A', units: {}, tasks: [
+    { id: 't1', title: 'Ok', start: '01-01', end: '01-02' }, { id: 't2', title: 'Trasig', start: '13-40', end: '01-02' }] });
+  mem.set('arshjul:wheel:a', raw);
+  expect(load('a').tasks.length).toBe(1);
+  expect(mem.get('arshjul:backup:a')).toBe(raw); // originalet med den trasiga uppgiften finns kvar
+  mem.set('arshjul:wheel:b', JSON.stringify({ format: 99, id: 'b', name: 'Ny', units: {}, tasks: [] }));
+  expect(load('b')).toBe(null);
+  expect(list().map(w => w.id)).toEqual(['a']);
+  expect(mem.has('arshjul:wheel:b')).toBe(true); // inte borttaget
+  delete globalThis.localStorage;
+});
+
+test('veckoregel: sista veckan i oktober, två sista i december + två första i januari', () => {
+  const black = { rule: { month: 10, nth: -1, weeks: 1 } };
+  expect(isoDate(startDate(black, 2026))).toBe('2026-10-26'); // måndag
+  expect(isoDate(endDate(black, 2026))).toBe('2026-11-01');   // söndag
+  expect(isoDate(startDate(black, 2027))).toBe('2027-10-25');
+  const jul = { rule: { month: 12, nth: -2, weeks: 4 } };
+  expect(isoDate(startDate(jul, 2026))).toBe('2026-12-21');
+  expect(isoDate(endDate(jul, 2026))).toBe('2027-01-17');     // över årsskiftet
+  expect(inYear(jul, 2026)).toMatchObject({ start: '12-21', end: '01-17' });
+  expect(isoDate(ruleStart({ month: 2, nth: 1, weeks: 1 }, 2027))).toBe('2027-02-01');
+  expect(isoDate(ruleStart({ month: 9, nth: 4, weeks: 1 }, 2026))).toBe('2026-09-28');
+  // Försenad räknas på årets datum.
+  const t = task({ ...black, start: '10-26', end: '11-01', created: '2020-01-01' });
+  expect(overdueYear(t, new Date(2026, 10, 2))).toBe(2026);
+  expect(overdueYear(t, new Date(2026, 10, 1))).toBe(2025);
+});
+
+test('veckoregel och påminnelse: sparas, valideras, äldre data oförändrad, iCal', () => {
+  const raw = { format: 1, id: 'w', name: 'W', units: {},
+    tasks: [task({ id: 'a', rule: { month: 10, nth: -1, weeks: 1 }, remind: 7 }),
+      task({ id: 'b', rule: { month: 13, nth: 9, weeks: 0 }, remind: -1 }), task({ id: 'c' })],
+    periods: [{ id: 'p', name: 'Jul', start: '12-21', end: '01-17', year: null, rule: { month: 12, nth: -2, weeks: 4 }, remind: 0 }] };
+  const w = sanitize(raw);
+  expect(w.tasks[0]).toMatchObject({ rule: { month: 10, nth: -1, weeks: 1 }, remind: 7 });
+  expect('rule' in w.tasks[1] || 'remind' in w.tasks[1]).toBe(false); // ogiltigt kastas, uppgiften finns kvar
+  expect(Object.keys(w.tasks[2])).toEqual(Object.keys(sanitize({ ...raw, tasks: [task({ id: 'c' })] }).tasks[0]));
+  expect('rule' in w.tasks[2]).toBe(false);
+  expect(w.periods[0]).toMatchObject({ rule: { month: 12, nth: -2, weeks: 4 }, remind: 0 });
+  const ics = toICS(w, 2026, new Date(Date.UTC(2026, 0, 1)));
+  expect(ics).toContain('DTSTART;VALUE=DATE:20261026');
+  expect(ics).toContain('RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1MO');
+  expect(ics).toContain('TRIGGER:-PT159H');                  // 7 dagar före, kl. 9
+  expect(ics.split('TRIGGER:PT9H').length - 1).toBe(2);       // utan påminnelse: som förut
+});
+
+test('påminnelser: från N dagar före till slutet, inte klara, en nyckel per förekomst', () => {
+  const w = { id: 'w', tasks: [
+    task({ id: 'a', start: '10-26', end: '11-01', remind: 7 }),
+    task({ id: 'b', start: '10-26', end: '11-01', remind: 7, done: { 2026: [0] } }),
+    task({ id: 'c', start: '10-26', end: '11-01' }),
+  ], periods: [
+    { id: 'p', name: 'Jul', start: '12-21', end: '01-17', year: null, rule: { month: 12, nth: -2, weeks: 4 }, remind: 0 },
+    { id: 'q', name: 'Bara 2025', start: '10-20', end: '11-05', year: 2025, remind: 30 },
+  ] };
+  const on = d => dueReminders([w], d).map(r => `${r.key}:${r.days}`);
+  expect(on(new Date(2026, 9, 18))).toEqual([]);
+  expect(on(new Date(2026, 9, 19))).toEqual(['w/a/2026:7']);
+  expect(on(new Date(2026, 10, 1))).toEqual(['w/a/2026:-6']);
+  expect(on(new Date(2026, 10, 2))).toEqual([]);
+  expect(on(new Date(2026, 11, 21))).toEqual(['w/p/2026:0']);
+  expect(on(new Date(2027, 0, 10))).toEqual(['w/p/2026:-20']); // pågår över årsskiftet
 });

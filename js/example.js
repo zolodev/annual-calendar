@@ -3,6 +3,21 @@
 // visar både klart, pågående och försenat (t.ex. Remiss från förra året).
 import { FORMAT } from './store.js';
 
+// Exempeluppgifter och perioder som de ser ut i mallen (båda språken). Bockar räknas inte –
+// det som jämförs är innehållet, så att en uppgift man ändrat räknas som ens egen.
+const sig = x => JSON.stringify([x.id, x.title ?? x.name, x.start, x.end, x.note ?? '', x.items ?? []]);
+let pristine;
+const known = () => (pristine ??= new Set(['sv', 'en'].flatMap(l => exampleWheels(l).flatMap(w => [...w.tasks, ...w.periods].map(sig)))));
+
+// Exempelhjul som kan tas bort utan att något av användarens eget försvinner:
+// varje uppgift och period är oförändrad från mallen (eller hjulet är tomt).
+export const isPristineExample = w => w.example === true && [...w.tasks, ...w.periods].every(x => known().has(sig(x)));
+
+// Hjul som äldre versioner skapade automatiskt ("Mitt årshjul" med enheten "Jag") och som aldrig använts.
+const DEFAULT_NAMES = ['Mitt årshjul', 'My annual wheel'], DEFAULT_UNITS = ['Jag', 'Me'];
+export const isUnusedDefault = w => !w.example && !w.tasks.length && !w.periods.length && DEFAULT_NAMES.includes(w.name) &&
+  Object.keys(w.units).length <= 1 && Object.values(w.units).every(u => DEFAULT_UNITS.includes(u.name));
+
 export function exampleWheels(lang, now = new Date()) {
   const y = now.getFullYear(), p = y - 1, created = `${p}-01-01`;
   const L = (sv, en) => (lang === 'sv' ? sv : en);

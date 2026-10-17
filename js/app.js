@@ -4,10 +4,10 @@ import { t, lang, setLang, monthName, fmtDate, applyStatic } from './i18n.js';
 import * as store from './store.js';
 import {
   doy, span, monthSpan, overlaps, startDate, endDate, isoDate, toMD, validISO,
-  doneSet, progress, isDone, overdueYear, matches, esc, uid, randomColor, isoWeek,
+  doneSet, progress, isDone, overdueYear, matches, esc, uid, randomColor, isoWeek, inYear, NTHS, dueReminders,
 } from './model.js';
 import { renderWheel } from './wheel.js';
-import { exampleWheels } from './example.js';
+import { exampleWheels, isPristineExample, isUnusedDefault } from './example.js';
 
 const $ = id => document.getElementById(id);
 const NOW_YEAR = new Date().getFullYear();
@@ -55,7 +55,9 @@ const inUnits = x => !unitFilter || x.units.some(u => unitFilter.has(u));
 const statusOk = (x, y) => status === 'all' || (status === 'done') === isDone(x, y);
 const searchOk = x => !query || matches(x, query);
 const fmtRange = (x, y) => `${fmtDate(startDate(x, y))} – ${fmtDate(endDate(x, y))}`;
-const byStart = (a, b) => doy(a.start) - doy(b.start);
+// Start/slut för visat år (uppgifter och perioder med veckoregel flyttar sig mellan åren).
+const at = x => inYear(x, year);
+const byStart = (a, b) => doy(at(a).start) - doy(at(b).start);
 
 // Lediga perioder som gäller visat år, och veckor/datum för visning.
 const periodsFor = y => shown.flatMap(w => w.periods).filter(p => p.year === null || p.year === y).sort(byStart);
@@ -66,7 +68,7 @@ const weeks = (p, y) => {
 const periodOwner = p => shown.find(w => w.periods.includes(p));
 const periodTip = (p, y) =>
   `${p.name || t('period')} · ${weeks(p, y)} · ${fmtRange(p, y)}${multi() ? ` · ${periodOwner(p).name}` : ''}`;
-const clashes = x => periodsFor(year).filter(p => overlaps(span(x), span(p)));
+const clashes = x => periodsFor(year).filter(p => overlaps(span(at(x)), span(at(p))));
 
 // ---- Rendering ---------------------------------------------------------------
 
@@ -125,9 +127,9 @@ function renderWheelView(base, late) {
 
 function wheelView(base, late, periods) {
   return {
-    periods: periods.map(p => ({ id: p.id, start: p.start, end: p.end, tip: periodTip(p, year) })),
+    periods: periods.map(p => ({ id: p.id, start: at(p).start, end: at(p).end, tip: periodTip(p, year) })),
     tasks: base.map(x => ({
-      id: x.id, title: x.title, start: x.start, end: x.end, color: color(x), late: late.has(x.id),
+      id: x.id, title: x.title, start: at(x).start, end: at(x).end, color: color(x), late: late.has(x.id),
       dim: !statusOk(x, year) || !searchOk(x) || (focus !== null && focus !== x.id),
       tip: `${x.title} (${fmtRange(x, year)})${x.units.length ? ' · ' + unitNames(x) : ''}${multi() ? ` · ${ownerOf(x).name}` : ''}`,
     })),
@@ -172,7 +174,7 @@ function renderPanel(base, late) {
   const entries = [
     ...(status === 'done' ? [] : base.filter(x => late.has(x.id) && visible(x)).sort(byStart).map(x => [x, late.get(x.id), true])),
     ...base.filter(x => visible(x) && statusOk(x, year) && late.get(x.id) !== year &&
-      (!mSpan || focus !== null || overlaps(span(x), mSpan))).sort(byStart).map(x => [x, year, false]),
+      (!mSpan || focus !== null || overlaps(span(at(x)), mSpan))).sort(byStart).map(x => [x, year, false]),
   ];
   const focused = findTask(focus);
   const title = focused ? focused.title : query ? t('searchResults')
@@ -182,7 +184,7 @@ function renderPanel(base, late) {
   let h = `<div class="panel-head"><div><h2>${esc(title)}</h2>
     <div class="sub">${esc(t('nTasks', entries.length))}</div></div>
     ${filtered ? `<button data-action="reset">${esc(t('showWholeYear'))}</button>` : ''}</div>`;
-  const ps = periodsFor(year).filter(p => !mSpan || overlaps(span(p), mSpan));
+  const ps = periodsFor(year).filter(p => !mSpan || overlaps(span(at(p)), mSpan));
   if (ps.length) h += `<div class="periods" aria-label="${esc(t('periods'))}">${ps.map(p =>
     `<button class="period-chip" data-period="${esc(p.id)}" title="${esc(t('editPeriod'))}"><i></i>
       <b>${esc(p.name || t('period'))}</b> <span>${esc(weeks(p, year))} · ${esc(fmtRange(p, year))}</span></button>`).join('')}</div>`;
@@ -191,23 +193,24 @@ function renderPanel(base, late) {
   for (const w of shown) {
     const mine = entries.filter(([x]) => w.tasks.includes(x));
     const groups = Object.keys(w.units).filter(u => !unitFilter || unitFilter.has(u));
-    if (mine.some(([x]) => !x.units.length)) groups.push('');
+    // "Utan enhet" när det finns sådana uppgifter, eller när hjulet saknar enheter (så att det syns och tar emot uppgifter).
+    if (mine.some(([x]) => !x.units.length) || (!unitFilter && !Object.keys(w.units).length)) groups.push('');
     nGroups += groups.length;
     if (multi() && groups.length) h += `<div class="wheel-head"><h3>${esc(w.name || '—')}</h3><small>${mine.length}</small>
       <button class="more" data-menu="wheel" data-id="${esc(w.id)}" aria-haspopup="menu"
         aria-label="${esc(t('wheelMenu'))}" title="${esc(t('wheelMenu'))}">⋯</button></div>`;
-    h += renderGroups(mine, groups);
+    h += renderGroups(mine, groups, w);
   }
   if (!nGroups) h += `<p class="empty">${esc(t('nothing'))}</p>`;
   $('panel').innerHTML = h;
 }
 
-function renderGroups(entries, groups) {
+function renderGroups(entries, groups, w) {
   let h = '';
   for (const g of groups) {
     const es = entries.filter(([x]) => (g ? x.units.includes(g) : !x.units.length));
     const nLate = es.filter(e => e[2]).length;
-    h += `<section class="group"${g ? ` data-drop-unit="${esc(g)}"` : ''}>
+    h += `<section class="group" ${g ? `data-drop-unit="${esc(g)}"` : `data-drop-wheel="${esc(w.id)}"`}>
       <div class="group-head"><i class="dot" style="background:${g ? unitOf(g).color : 'var(--muted)'}"></i>
         <span class="group-name">${esc(g ? unitOf(g).name || '—' : t('noUnit'))}</span>
         <small>${es.length}</small>${nLate ? `<small class="late-count">${esc(t('nLate', nLate))}</small>` : ''}
@@ -377,8 +380,27 @@ function moveTask(id, from, to) {
   notify(t('moved', x.title, unitLabel(to)));
 }
 
+// Släpp i "Utan enhet": uppgiften tas bort från enheten den drogs från, eller flyttas till det hjulet utan enhet.
+function moveToWheel(id, from, wid) {
+  const x = findTask(id), src = x && ownerOf(x), dst = shown.find(w => w.id === wid);
+  if (!x || !dst) return;
+  if (src === dst) {
+    if (!x.units.includes(from)) return;
+    x.units = x.units.filter(u => u !== from);
+  } else {
+    src.tasks = src.tasks.filter(o => o !== x);
+    dst.tasks.push(x);
+    x.units = [];
+  }
+  persist();
+  render();
+  notify(t('moved', x.title, multi() ? `${t('noUnit')} · ${dst.name || '—'}` : t('noUnit')));
+}
+
 let dragging = null; // { id, from }
-const dropZone = e => dragging && e.target.closest?.('[data-drop-unit]');
+const dropZone = e => dragging && e.target.closest?.('[data-drop-unit], [data-drop-wheel]');
+const sameZone = z => (z.dataset.dropUnit !== undefined ? z.dataset.dropUnit === dragging.from
+  : dragging.from === '' && ownerOf(findTask(dragging.id))?.id === z.dataset.dropWheel);
 const clearDrop = () => document.querySelectorAll('.drop-over').forEach(el => el.classList.remove('drop-over'));
 
 $('panel').addEventListener('dragstart', e => {
@@ -393,7 +415,7 @@ $('panel').addEventListener('dragstart', e => {
 document.addEventListener('dragover', e => {
   const z = dropZone(e);
   clearDrop();
-  if (!z || z.dataset.dropUnit === dragging.from) return;
+  if (!z || sameZone(z)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   z.classList.add('drop-over');
@@ -402,7 +424,8 @@ document.addEventListener('drop', e => {
   const z = dropZone(e);
   if (!z) return;
   e.preventDefault();
-  moveTask(dragging.id, dragging.from, z.dataset.dropUnit);
+  if (z.dataset.dropWheel) moveToWheel(dragging.id, dragging.from, z.dataset.dropWheel);
+  else moveTask(dragging.id, dragging.from, z.dataset.dropUnit);
 });
 document.addEventListener('dragend', () => {
   dragging = null;
@@ -448,12 +471,28 @@ function fillWheelPick(sel, w) {
 }
 const pickedWheel = sel => shown.find(w => w.id === sel.value) ?? shown[0];
 
-function renderTaskUnits(w, sel) {
-  $('task-units').innerHTML = Object.entries(w.units).map(([id, u]) =>
-    `<label class="check"><input type="checkbox" name="unit" value="${esc(id)}"${sel.has(id) ? ' checked' : ''}>
-      <i class="dot" style="background:${u.color}"></i>${esc(u.name || '—')}</label>`).join('') ||
-    `<span class="muted">${esc(t('noUnits'))}</span>`;
+// Grupper per visat hjul. Kryssas grupper (eller hjulet) i flera hjul hamnar uppgiften i vart och ett
+// som en egen kopia med egen status – inte en länk.
+function renderTaskUnits(wsel, usel) {
+  const boxes = w => Object.entries(w.units).map(([id, u]) =>
+    `<label class="check"><input type="checkbox" name="unit" value="${esc(id)}" data-wheel="${esc(w.id)}"${usel.has(id) ? ' checked' : ''}>
+      <i class="dot" style="background:${u.color}"></i>${esc(u.name || '—')}</label>`).join('');
+  $('task-units').innerHTML = multi()
+    ? shown.map(w => `<div class="pick-wheel"><label class="check wheel-check"><input type="checkbox" name="twheel"
+        value="${esc(w.id)}"${wsel.has(w.id) ? ' checked' : ''}><b>${esc(w.name || '—')}</b></label>
+        <div class="checks">${boxes(w)}</div></div>`).join('')
+    : `<div class="checks">${boxes(shown[0]) || `<span class="muted">${esc(t('noUnits'))}</span>`}</div>`;
+  $('task-units-hint').hidden = !multi();
 }
+
+// Grupp ikryssad → dess hjul ikryssat. Hjul urkryssat → dess grupper urkryssade.
+$('task-units').addEventListener('change', e => {
+  const c = e.target;
+  form.querySelectorAll('[name=twheel]').forEach(b => b.setCustomValidity(''));
+  const box = c.name === 'unit' && c.checked && form.querySelector(`[name=twheel][value="${CSS.escape(c.dataset.wheel)}"]`);
+  if (box) box.checked = true;
+  if (c.name === 'twheel' && !c.checked) form.querySelectorAll(`[name=unit][data-wheel="${CSS.escape(c.value)}"]`).forEach(u => { u.checked = false; });
+});
 
 function openTask(id, unit = null) {
   const x = findTask(id);
@@ -464,17 +503,14 @@ function openTask(id, unit = null) {
   else e.setDate(e.getDate() + 7);
   $('task-heading').textContent = t(x ? 'editTask' : 'newTask');
   field('title').value = x?.title ?? '';
-  field('start').value = isoDate(s);
-  field('end').value = isoDate(e);
-  field('end').setCustomValidity('');
+  fillWhen(form, x, s, e);
   field('note').value = x?.note ?? '';
   field('items').value = x ? x.items.join('\n') : '';
   field('notify').checked = x ? x.notify : true;
   const w = x ? ownerOf(x) : unitWheel(unit ?? [...(unitFilter ?? [])][0]) ?? shown[0];
   const ids = Object.keys(w.units);
   const sel = new Set(x ? x.units : unit ? [unit] : unitFilter ? [...unitFilter] : ids.length === 1 ? ids : []);
-  fillWheelPick(field('wheel'), w);
-  renderTaskUnits(w, sel);
+  renderTaskUnits(new Set([w.id, ...[...sel].map(u => unitWheel(u)?.id)]), sel);
   $('task-delete').hidden = !x;
   $('dlg-task').showModal();
 }
@@ -491,37 +527,40 @@ function remapDone(x, items) {
   }
 }
 
-field('start').addEventListener('input', () => field('start').setCustomValidity(''));
-field('end').addEventListener('input', () => field('end').setCustomValidity(''));
-field('wheel').addEventListener('change', () => {
-  const w = pickedWheel(field('wheel')), ids = Object.keys(w.units);
-  renderTaskUnits(w, new Set(ids.length === 1 ? ids : []));
-});
-
 form.addEventListener('submit', e => {
   e.preventDefault();
-  if (!checkDates(form)) return;
-  const s = field('start').value, en = field('end').value, days = (new Date(en) - new Date(s)) / 864e5;
-  if (!(days >= 0 && days < 366 && (days === 0 || toMD(s) !== toMD(en)))) {
-    field('end').setCustomValidity(t('badRange'));
-    return field('end').reportValidity();
+  const when = readWhen(form);
+  if (!when) return;
+  const picked = new Set([...form.querySelectorAll('[name=twheel]:checked')].map(c => c.value));
+  const targets = multi() ? shown.filter(w => picked.has(w.id)) : [shown[0]];
+  if (!targets.length) {
+    const b = form.querySelector('[name=twheel]');
+    b.setCustomValidity(t('pickWheel'));
+    return b.reportValidity();
   }
+  const unitsIn = w => [...form.querySelectorAll('[name=unit]:checked')].filter(c => c.dataset.wheel === w.id).map(c => c.value);
   const items = field('items').value.split('\n').map(s => s.trim()).filter(Boolean);
-  const w = pickedWheel(field('wheel'));
-  let x = findTask(editing);
+  const today = isoDate(new Date());
+  let x = findTask(editing), main;
   if (x) {
     remapDone(x, items);
     const o = ownerOf(x);
-    if (o !== w) { o.tasks = o.tasks.filter(t => t !== x); w.tasks.push(x); }
-  } else w.tasks.push(x = { id: uid(), done: {}, created: isoDate(new Date()) });
+    main = targets.includes(o) ? o : targets[0];
+    if (main !== o) { o.tasks = o.tasks.filter(t => t !== x); main.tasks.push(x); }
+  } else (main = targets[0]).tasks.push(x = { id: uid(), done: {}, created: today });
   Object.assign(x, {
-    title: field('title').value.trim(), start: toMD(s), end: toMD(en), note: field('note').value.trim(), items,
-    notify: field('notify').checked,
-    units: [...form.querySelectorAll('[name=unit]:checked')].map(c => c.value),
+    title: field('title').value.trim(), note: field('note').value.trim(), items,
+    notify: field('notify').checked, units: unitsIn(main),
   });
+  applyWhen(x, when);
+  const copies = targets.filter(w => w !== main);
+  for (const w of copies) {
+    w.tasks.push({ ...x, id: uid(), done: {}, created: today, items: [...x.items], units: unitsIn(w), ...(x.rule && { rule: { ...x.rule } }) });
+  }
   persist();
   $('dlg-task').close();
   render();
+  if (copies.length) notify(t('addedToWheels', x.title, targets.length));
 });
 
 async function deleteTask(id) {
@@ -571,6 +610,89 @@ document.querySelectorAll('input.date').forEach(text => {
   });
 });
 
+// ---- När: fasta datum eller veckoregel, plus påminnelse (uppgifter och perioder) ---------
+
+const NTH_KEY = { 1: 'nth1', 2: 'nth2', 3: 'nth3', 4: 'nth4', '-2': 'nthM2', '-1': 'nthM1' };
+const usesRule = f => f.elements.repeat.value === 'weeks';
+const formRule = f => ({
+  month: Number(f.elements.rmonth.value), nth: Number(f.elements.nth.value),
+  weeks: Math.min(26, Math.max(1, Math.round(Number(f.elements.rweeks.value) || 1))),
+});
+
+function fillWhen(f, x, s, e) {
+  const el = n => f.elements[n];
+  el('nth').innerHTML = NTHS.map(n => `<option value="${n}">${esc(t(NTH_KEY[n]))}</option>`).join('');
+  el('rmonth').innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${esc(monthName(i))}</option>`).join('');
+  const r = x?.rule ?? { month: s.getMonth() + 1, nth: -1, weeks: 1 };
+  el('repeat').value = x?.rule ? 'weeks' : 'date';
+  el('nth').value = String(r.nth);
+  el('rmonth').value = String(r.month);
+  el('rweeks').value = String(r.weeks);
+  el('start').value = isoDate(s);
+  el('end').value = isoDate(e);
+  el('start').setCustomValidity('');
+  el('end').setCustomValidity('');
+  el('remind').checked = Number.isInteger(x?.remind);
+  el('remindDays').value = String(x?.remind ?? 7);
+  syncWhen(f);
+}
+
+// Visa rätt fält och en förhandsvisning: veckoregeln för i år och nästa år, annars veckonummer.
+function syncWhen(f) {
+  const el = n => f.elements[n], rule = usesRule(f);
+  f.querySelector('.when-date').hidden = rule;
+  f.querySelector('.when-rule').hidden = !rule;
+  el('start').required = el('end').required = !rule;
+  el('remindDays').disabled = !el('remind').checked;
+  const range = (x, y) => `${isoDate(startDate(x, y))} – ${isoDate(endDate(x, y))} (${weeks(x, y)})`;
+  let hint = '';
+  if (rule) {
+    const x = { rule: formRule(f) };
+    hint = [year, year + 1].map(y => `${y}: ${range(x, y)}`).join(' · ');
+  } else {
+    const s = el('start').value, e = el('end').value;
+    if (validISO(s) && validISO(e) && e >= s) hint = `${weeks({ start: toMD(s), end: toMD(e) }, Number(s.slice(0, 4)))} · `;
+    hint += t('wrapHint');
+  }
+  f.querySelector('.when-hint').textContent = hint;
+}
+
+// { start, end, rule } från formuläret, eller null (felet visas i fältet).
+// Med veckoregel sparas även start/slut för visat år, så att äldre versioner kan visa uppgiften.
+function readWhen(f) {
+  const el = n => f.elements[n];
+  const remind = el('remind').checked ? Math.min(365, Math.max(0, Math.round(Number(el('remindDays').value) || 0))) : undefined;
+  if (usesRule(f)) {
+    const rule = formRule(f), r = inYear({ rule }, year);
+    return { start: r.start, end: r.end, rule, remind, year };
+  }
+  if (!checkDates(f)) return null;
+  const s = el('start').value, en = el('end').value, days = (new Date(en) - new Date(s)) / 864e5;
+  if (!(days >= 0 && days < 366 && (days === 0 || toMD(s) !== toMD(en)))) {
+    el('end').setCustomValidity(t('badRange'));
+    el('end').reportValidity();
+    return null;
+  }
+  return { start: toMD(s), end: toMD(en), remind, year: Number(s.slice(0, 4)) };
+}
+function applyWhen(x, { start, end, rule, remind }) {
+  Object.assign(x, { start, end });
+  if (rule) x.rule = rule; else delete x.rule;
+  if (remind !== undefined) x.remind = remind; else delete x.remind;
+}
+
+for (const f of [form, $('form-period')]) {
+  f.addEventListener('input', e => {
+    if (e.target.name === 'start' || e.target.name === 'end') e.target.setCustomValidity('');
+    syncWhen(f);
+  });
+  f.addEventListener('change', e => {
+    syncWhen(f);
+    // Påminnelse ikryssad: be om lov att visa notiser direkt (kräver ett klick).
+    if (e.target.name === 'remind' && e.target.checked && canNotify && !notifyOn()) toggleNotify();
+  });
+}
+
 // Felaktigt datum: markera fältet med ett begripligt meddelande.
 function checkDates(f) {
   for (const n of ['start', 'end']) {
@@ -597,39 +719,22 @@ function openPeriod(id) {
   else { s = new Date(); e = new Date(); e.setDate(e.getDate() + 6); }
   $('period-heading').textContent = t(p ? 'editPeriod' : 'newPeriod');
   pfield('name').value = p?.name ?? '';
-  pfield('start').value = isoDate(s);
-  pfield('end').value = isoDate(e);
-  pfield('end').setCustomValidity('');
+  fillWhen(pform, p, s, e);
   pfield('recurring').checked = p ? p.year === null : true;
-  showWeeks();
   $('period-delete').hidden = !p;
   $('dlg-period').showModal();
 }
 
-// Visa veckonummer medan man väljer datum.
-function showWeeks() {
-  const s = pfield('start').value, e = pfield('end').value;
-  $('period-weeks').textContent = validISO(s) && validISO(e) ? weeks({ start: toMD(s), end: toMD(e) }, Number(s.slice(0, 4))) : '';
-}
-pfield('start').addEventListener('input', () => { pfield('start').setCustomValidity(''); showWeeks(); });
-pfield('end').addEventListener('input', () => { pfield('end').setCustomValidity(''); showWeeks(); });
-
 pform.addEventListener('submit', e => {
   e.preventDefault();
-  if (!checkDates(pform)) return;
-  const s = pfield('start').value, en = pfield('end').value, days = (new Date(en) - new Date(s)) / 864e5;
-  if (!(days >= 0 && days < 366 && (days === 0 || toMD(s) !== toMD(en)))) {
-    pfield('end').setCustomValidity(t('badRange'));
-    return pfield('end').reportValidity();
-  }
+  const when = readWhen(pform);
+  if (!when) return;
   const w = pickedWheel(pfield('wheel'));
   let p = shown.flatMap(w => w.periods).find(p => p.id === editingPeriod);
   if (p && periodOwner(p) !== w) { const o = periodOwner(p); o.periods = o.periods.filter(q => q !== p); w.periods.push(p); }
   if (!p) w.periods.push(p = { id: uid() });
-  Object.assign(p, {
-    name: pfield('name').value.trim(), start: toMD(s), end: toMD(en),
-    year: pfield('recurring').checked ? null : Number(s.slice(0, 4)),
-  });
+  Object.assign(p, { name: pfield('name').value.trim(), year: pfield('recurring').checked ? null : when.year });
+  applyWhen(p, when);
   persist();
   $('dlg-period').close();
   render();
@@ -737,6 +842,7 @@ function toggleFab(open = !fabOpen()) {
   }
   $('fab-btn').setAttribute('aria-expanded', open);
   $('fab-menu').classList.toggle('open', open);
+  $('fab').classList.toggle('open', open);
   $('fab-menu').inert = !open;
   if (open) $('fab-menu').lastElementChild.focus();
 }
@@ -750,9 +856,22 @@ $('fab-menu').addEventListener('click', e => {
   else if (b.dataset.fab === 'period') openPeriod(null);
   else openTask(null, b.dataset.id || null);
 });
-document.addEventListener('click', e => { if (fabOpen() && !e.target.closest('#fab')) toggleFab(false); });
+// Klick utanför menyn – även på den mörka bakgrunden (som hör till #fab) – stänger den.
+document.addEventListener('click', e => { if (fabOpen() && (!e.target.closest('#fab') || e.target.id === 'fab')) toggleFab(false); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && fabOpen()) { toggleFab(false); $('fab-btn').focus(); }
+});
+
+// ---- Flera flikar: läs in hjul som ändrats i en annan flik, så att en gammal kopia här aldrig
+// skriver över nyare uppgifter där.
+window.addEventListener('storage', e => {
+  if (!e.key?.startsWith('arshjul:wheel:')) return;
+  const id = e.key.slice(14), i = shown.findIndex(w => w.id === id);
+  if (i < 0) return render();
+  const w = store.load(id);
+  if (w) shown[i] = w; else shown.splice(i, 1);
+  if (!shown.length) return start();
+  render();
 });
 
 // ---- Hjul: visa/dölj, nytt, byt namn, exportera, ta bort -------------------------
@@ -782,15 +901,21 @@ $('wheels').addEventListener('dblclick', e => {
 const nform = $('form-new');
 const savedWheels = () => store.list().map(w => store.load(w.id)).filter(Boolean);
 const examples = () => [...new Map([...savedWheels(), ...shown].filter(w => w.example).map(w => [w.id, w])).values()];
+// Bara oförändrade exempel får tas bort; ändrade behålls (användarens uppgifter tas aldrig bort).
+// Både versionen i minnet och den sparade (kan ha ändrats i en annan flik) måste vara oförändrade.
+const pristine = w => isPristineExample(w) && [store.load(w.id)].every(o => !o || isPristineExample(o));
+const removableExamples = () => examples().filter(pristine);
 
 function newWheel() {
-  const ex = examples();
+  const ex = removableExamples(), kept = examples().filter(w => !pristine(w));
   nform.elements.name.value = '';
   nform.elements.name.placeholder = t('defaultWheel');
   nform.querySelector('[name=from][value=empty]').checked = true;
   nform.elements.clear.checked = true;
   $('clear-box').hidden = !ex.length;
   $('clear-text').textContent = t('clearExamples', ex.map(w => w.name).join(', '));
+  $('clear-kept').hidden = !kept.length;
+  $('clear-kept').textContent = t('examplesKept', kept.map(w => w.name).join(', '));
   $('dlg-new').showModal();
 }
 
@@ -803,12 +928,20 @@ nform.addEventListener('submit', e => {
   if (fromExample) {
     const ex = store.copyWheel(exampleWheels(lang)[0]);
     w = { ...ex, name, tasks: ex.tasks.map(x => ({ ...x, done: {}, created: today })) };
-  } else w = store.newWheel(name, t('defaultUnit'));
+  } else w = store.newWheel(name);
   if (!$('clear-box').hidden && nform.elements.clear.checked) {
-    const gone = new Set(examples().map(o => o.id));
+    const gone = new Set(removableExamples().map(o => o.id));
     gone.forEach(store.remove);
     shown = shown.filter(o => !gone.has(o.id));
   }
+  // Ändrade exempelhjul är nu användarens egna.
+  examples().filter(o => !pristine(o)).forEach(o => {
+    const cur = store.load(o.id) ?? o; // spara aldrig över nyare data från en annan flik
+    delete cur.example;
+    try { store.save(cur); } catch { /* sparas nästa gång */ }
+    const i = shown.findIndex(v => v.id === cur.id);
+    if (i >= 0) shown[i] = cur;
+  });
   try { store.save(w); } catch { notify(t('saveFailed')); }
   $('dlg-new').close();
   shown.push(w);
@@ -985,28 +1118,50 @@ function applyNotifyBtn() {
   b.setAttribute('aria-label', b.title);
 }
 
-async function notifyLate() {
-  const today = isoDate(new Date());
-  if (!notifyOn() || store.pref('notified') === today) return;
-  // Alla sparade hjul, inte bara de som visas.
-  const ws = store.list().map(w => store.load(w.id)).filter(Boolean);
-  const late = (ws.length ? ws : shown).flatMap(w => w.tasks).filter(x => x.notify && overdueYear(x) !== null).map(x => x.title);
-  if (!late.length) return;
-  store.pref('notified', today);
-  const title = `${t('appName')}: ${t('nLate', late.length)}`;
-  const opts = { body: late.slice(0, 5).join('\n') + (late.length > 5 ? '\n…' : ''), icon: 'icon.svg', tag: 'arshjul-late' };
+async function showNote(title, lines, tag) {
+  const opts = { body: lines.slice(0, 5).join('\n') + (lines.length > 5 ? '\n…' : ''), icon: 'icon.svg', tag };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     if (reg) await reg.showNotification(title, opts); else new Notification(title, opts);
   } catch { notify(title); }
 }
 
+// Alla sparade hjul, inte bara de som visas.
+const savedAll = () => { const ws = store.list().map(w => store.load(w.id)).filter(Boolean); return ws.length ? ws : shown; };
+
+async function notifyLate() {
+  const today = isoDate(new Date());
+  if (!notifyOn() || store.pref('notified') === today) return;
+  const late = savedAll().flatMap(w => w.tasks).filter(x => x.notify && overdueYear(x) !== null).map(x => x.title);
+  if (!late.length) return;
+  store.pref('notified', today);
+  showNote(`${t('appName')}: ${t('nLate', late.length)}`, late, 'arshjul-late');
+}
+
+// Påminnelser ("Påminn mig N dagar före start"): en gång per förekomst. Sparade nycklar rensas
+// när förekomsten är över, så listan växer inte.
+async function notifyReminders() {
+  if (!notifyOn()) return;
+  const due = dueReminders(savedAll());
+  const sent = new Set((store.pref('reminded') ?? '').split(',').filter(Boolean));
+  const fresh = due.filter(r => !sent.has(r.key));
+  store.pref('reminded', due.map(r => r.key).join(','));
+  if (!fresh.length) return;
+  const line = r => t(r.days > 0 ? 'startsIn' : r.days === 0 ? 'startsToday' : 'ongoing', r.name || t('period'), r.days, isoDate(r.start));
+  showNote(fresh.length === 1 ? `${t('appName')}: ${line(fresh[0])}` : `${t('appName')}: ${t('nReminders', fresh.length)}`,
+    fresh.map(line), 'arshjul-remind');
+}
+const notifyAll = () => { notifyReminders(); notifyLate(); };
+// Appen kan ligga öppen länge (t.ex. som app på hemskärmen): kolla igen när den visas och varje timme.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') notifyAll(); });
+setInterval(notifyAll, 36e5);
+
 async function toggleNotify() {
   if (notifyOn()) store.pref('notify', 'off');
   else if (await Notification.requestPermission().catch(() => 'denied') === 'granted') {
     store.pref('notify', 'on');
     store.pref('notified', '');
-    notifyLate();
+    notifyAll();
   } else notify(t('notifyBlocked'));
   applyNotifyBtn();
 }
@@ -1120,18 +1275,41 @@ $('btn-lang').addEventListener('click', () => {
   render();
 });
 
+// Exempeldata som standard tills användaren har egna uppgifter. Körs en gång (pref 'examples').
+// Bakåtkompatibelt: inga hjul, uppgifter eller inställningar tas bort. Ett oanvänt standardhjul från
+// äldre versioner (inga uppgifter, bara enheten "Jag"/"Me") blir ett tomt exempelhjul – det kan sedan
+// tas bort med "Ta bort exempelhjulen" när man skapar ett eget hjul.
+function addExamples() {
+  if (store.pref('examples')) return [];
+  const saved = savedWheels();
+  for (const w of saved.filter(isUnusedDefault)) {
+    w.units = {};
+    w.example = true;
+    try { store.save(w); } catch { /* lagring blockerad */ }
+  }
+  const hasOwn = saved.some(w => !w.example && (w.tasks.length || w.periods.length));
+  const ex = exampleWheels(lang).map(store.sanitize).filter(w => !saved.some(o => o.id === w.id));
+  if (hasOwn || saved.some(w => w.id === 'exempel')) ex.length = 0;
+  try { ex.forEach(store.save); store.pref('examples', 'added'); } catch { /* lagring blockerad: kör i minnet */ }
+  return ex;
+}
+
 // Visa samma hjul som förra gången (äldre versioner sparade bara ett: 'last'), annars det första.
-// Finns inget hjul skapas ett.
 function start() {
+  const ex = addExamples();
   const ids = store.list().map(w => w.id);
-  const want = (store.pref('shown') || store.pref('last') || '').split(',').filter(id => ids.includes(id));
+  // Nya exempelhjul visas; tidigare visade hjul behålls (utom ett tomt standardhjul som blivit exempel).
+  const before = (store.pref('shown') || store.pref('last') || '').split(',').filter(id => ids.includes(id))
+    .filter(id => !ex.length || !store.load(id)?.example);
+  const want = [...before, ...ex.map(w => w.id)];
   shown = [];
   if (ids.length) return show(want.length ? want : ids.slice(0, 1));
-  // Första start: exempelhjulen (kan tas bort när man skapar ett eget hjul).
-  const ws = exampleWheels(lang).map(store.sanitize);
-  try { ws.forEach(store.save); } catch { /* lagring blockerad: kör i minnet */ }
-  shown = ws;
-  show(ws.map(w => w.id));
+  if (ex.length) { shown = ex; return show(ex.map(w => w.id)); } // lagring blockerad: exemplet i minnet
+  // Alla hjul borttagna: ett tomt hjul.
+  const w = store.newWheel(t('defaultWheel'));
+  try { store.save(w); } catch { /* kör i minnet */ }
+  shown = [w];
+  show([w.id]);
 }
 
 theme = Object.hasOwn(THEMES, store.pref('theme')) ? store.pref('theme') : 'auto';
@@ -1142,6 +1320,6 @@ setLang(store.pref('lang') || (navigator.language?.toLowerCase().startsWith('sv'
 applyLang();
 start();
 importFromHash();
-notifyLate();
+notifyAll();
 navigator.storage?.persist?.().catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register(`sw.js?v=${VERSION}`).catch(() => {});
