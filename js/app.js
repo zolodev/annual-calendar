@@ -1326,4 +1326,12 @@ start();
 importFromHash();
 notifyAll();
 navigator.storage?.persist?.().catch(() => {});
-if ('serviceWorker' in navigator) navigator.serviceWorker.register(`sw.js?v=${VERSION}`).catch(() => {});
+if ('serviceWorker' in navigator) {
+  // En ny version tog över (ny service worker): ladda om en gång så att de nya filerna visas.
+  const had = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (had && !reloaded) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register(`sw.js?v=${VERSION}`, { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
+}

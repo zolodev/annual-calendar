@@ -85,7 +85,7 @@ Båda styr hjul (ej matchande bågar dämpas), lista, sök och "% klart". Exempe
 ## Versionsnumrering
 - `js/version.js`: `export const VERSION = '0.1.0'` (semver) – enda stället versionen anges.
 - Visas diskret i sidfoten: `Årshjul v0.1.0`.
-- Service workerns cachenamn = `arshjul-${VERSION}` → ny version rensar gammal cache automatiskt.
+- Service workern hämtar från nätverket först och använder cachen bara offline, så en ny version syns direkt. Byts service workern laddas sidan om en gång. Gamla cachar (`arshjul-0.x.y`) rensas.
 - `format` (data) och `VERSION` (app) är separata.
 
 ## Filstruktur
@@ -180,7 +180,7 @@ Enkel `includes()` på titel, notering och punkter, efter `toLowerCase()` + `nor
 1. **Skelett** – mock-up → filerna ovan, ny datamodell (MM-DD, inga kategorier), i18n, `esc()`, version i sidfot, status-/enhetsfilter, försenat-logik, årspilar.
 2. **Lagring + export/import** – localStorage, flera hjul, hjulväljare, validering vid import (nytt hjul, eller ersätt om samma `id` efter bekräftelse).
 3. **Redigering** – `<dialog>` för uppgift (titel, enheter, start/slut, notering, punkter) och enhet (namn, färg).
-4. **PWA** – manifest, `sw.js` (cache-first, cachenamn med VERSION), installerbar.
+4. **PWA** – manifest, `sw.js` (nätverket först, cache offline), installerbar.
 5. **Polish** – tangentbord, utskrift/PDF, mörkt läge, export-påminnelse.
 
 ## Senare (inte nu)
