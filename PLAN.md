@@ -154,6 +154,9 @@ Globala, sparas i webbläsaren och gäller direkt:
 - **+ Nytt hjul** öppnar en dialog: namn, börja med *ett tomt hjul* eller *en kopia av exemplet* (utan bockar), och en förvald ruta *Ta bort exempelhjulen först* som bara gäller **oförändrade** exempel. Exempelhjul med egna/ändrade uppgifter eller perioder listas som "behålls" och blir användarens egna.
 - En kopia (import, mall) är aldrig ett exempel.
 
+## Export (text eller fil)
+Knappen Exportera (och Exportera i hjulets ⋯-meny) öppnar en dialog som visar hjulet som JSON-text: "Kopiera text" för att spara den själv (anteckning, mejl), "Ladda ner fil", och med flera hjul en väljare plus "Ladda ner alla" (en fil per hjul). Kopiering eller nedladdning räknas som backup i sidfoten. Texten klistras in under Importera för att få tillbaka hjulet.
+
 ## Import (fil eller kod)
 Knappen Importera (och ⇩ Importera vid hjulen) öppnar en dialog med en textruta: klistra in en delningskod, en länk eller texten från en exporterad fil (JSON), eller välj en fil. Inklistrad JSON behandlas som en fil (bockar följer med). Krokiga citattecken (“ ”) från telefonens anteckningar rättas om JSON annars inte går att läsa.
 Både Importera (.json) och Från kod leder till samma val:

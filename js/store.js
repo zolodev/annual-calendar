@@ -169,8 +169,9 @@ export function copyWheel(w, id = uid()) {
 
 const baseName = w => `minplan-${w.name.replace(/[^\p{L}\p{N}]+/gu, '-') || w.id}`;
 
+export const exportText = w => JSON.stringify(w, null, 2);
 export function exportFile(w) {
-  return { name: `${baseName(w)}.json`, blob: new Blob([JSON.stringify(w, null, 2)], { type: 'application/json' }) };
+  return { name: `${baseName(w)}.json`, blob: new Blob([exportText(w)], { type: 'application/json' }) };
 }
 
 // ---- iCal (RFC 5545): varje uppgift = heldagshändelse som återkommer årligen, påminnelse kl. 9 på startdagen

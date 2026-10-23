@@ -275,6 +275,7 @@ dialog .row label { flex: 1; min-width: 0; }
 fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0; padding: 8px 12px; }
 legend { font-size: calc(13px * var(--fs)); color: var(--muted); padding: 0 4px; }
 #form-settings fieldset { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+#dlg-export label { margin-bottom: 10px; }
 .code { width: 100%; font-family: ui-monospace, monospace; font-size: calc(12px * var(--fs)); word-break: break-all; resize: vertical; }
 .range { display: flex; align-items: center; gap: 10px; }
 .range input { flex: 1; }
@@ -290,7 +291,7 @@ dialog .row.when-rule label.narrow { flex: 0 0 6.5em; }
 .remind input[type=number] { width: 4.5em; padding: 6px 8px; }
 .remind input:disabled + span { color: var(--muted); }
 dialog label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: calc(15px * var(--fs)); }
-.actions { display: flex; gap: 8px; margin-top: 8px; }
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .spacer { flex: 1; }
 .unit-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .unit-row { align-items: center; }

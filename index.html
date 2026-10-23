@@ -203,6 +203,20 @@
     </div>
   </dialog>
 
+  <dialog id="dlg-export">
+    <h2 data-i18n="exportTitle"></h2>
+    <p class="muted hint" data-i18n="exportHint"></p>
+    <label><span data-i18n="wheel"></span><select id="export-wheel"></select></label>
+    <textarea id="export-text" class="code" rows="10" readonly></textarea>
+    <div class="actions">
+      <button type="button" id="export-all" hidden></button>
+      <span class="spacer"></span>
+      <button type="button" data-close data-i18n="close"></button>
+      <button type="button" id="export-file" data-i18n="downloadFile"></button>
+      <button type="button" id="export-copy" class="primary" data-i18n="copyText"></button>
+    </div>
+  </dialog>
+
   <dialog id="dlg-code">
     <form id="form-code">
       <h2 data-i18n="addFromCode"></h2>

@@ -962,7 +962,7 @@ function wheelCmd(cmd, id) {
   if (!w) return;
   if (cmd === 'rename') openWheelDialog(w);
   else if (cmd === 'only') show([id]);
-  else if (cmd === 'export') exportWheels([w]);
+  else if (cmd === 'export') openExport(w);
   else if (cmd === 'share') openShare(w);
   else deleteWheel(w);
 }
@@ -1007,7 +1007,25 @@ function exportWheels(ws) {
   renderFooter();
 }
 
-$('btn-export').addEventListener('click', () => exportWheels(shown));
+// Exportdialog: hjulet som text att kopiera och spara själv (importeras genom att klistra in),
+// eller som fil. Ett hjul i taget; "Ladda ner alla" ger en fil per visat hjul.
+const exportPick = () => shown.find(w => w.id === $('export-wheel').value) ?? shown[0];
+function showExport() { $('export-text').value = store.exportText(exportPick()); }
+function openExport(w = shown[0]) {
+  $('export-wheel').innerHTML = shown.map(o =>
+    `<option value="${esc(o.id)}"${o === w ? ' selected' : ''}>${esc(o.name || '—')}</option>`).join('');
+  $('export-wheel').closest('label').hidden = !multi();
+  $('export-all').hidden = !multi();
+  $('export-all').textContent = t('downloadAll', shown.length);
+  showExport();
+  $('dlg-export').showModal();
+}
+const markExported = w => { store.pref(`exported:${w.id}`, Date.now()); renderFooter(); };
+$('export-wheel').addEventListener('change', showExport);
+$('export-copy').addEventListener('click', async () => { if (await copy($('export-text').value, $('export-text'))) markExported(exportPick()); });
+$('export-file').addEventListener('click', () => exportWheels([exportPick()]));
+$('export-all').addEventListener('click', () => exportWheels(shown));
+$('btn-export').addEventListener('click', () => openExport());
 
 // Alla visade hjul i en och samma kalenderfil.
 $('btn-ics').addEventListener('click', () => download(store.exportICS(shown, NOW_YEAR)));
@@ -1072,11 +1090,15 @@ async function openShare(w) {
   $('share-code').select();
 }
 
-async function copy(text) {
-  try { await navigator.clipboard.writeText(text); notify(t('copied')); }
+// Kopiera till urklipp. Går det inte (t.ex. blockerat i en inbäddad vy) markeras texten så att man kan kopiera själv.
+async function copy(text, field = $('share-code')) {
+  try { await navigator.clipboard.writeText(text); notify(t('copied')); return true; }
   catch {
-    $('share-code').select();
-    notify(document.execCommand?.('copy') ? t('copied') : t('copyFailed'));
+    field.focus();
+    field.select();
+    const ok = !!document.execCommand?.('copy');
+    notify(t(ok ? 'copied' : 'copyFailed'));
+    return ok;
   }
 }
 $('share-copy').addEventListener('click', () => copy($('share-code').value));

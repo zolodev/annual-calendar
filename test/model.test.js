@@ -303,3 +303,10 @@ test('import från inklistrad text: JSON, JSON med krokiga citattecken, delnings
   expect((await parseText(`Här: ${code}`, '2026-10-18')).tasks[0].created).toBe('2026-10-18');
   await expect(parseText('hej', '2026-10-18')).rejects.toThrow();
 });
+
+test('exporterad text går att klistra in och ger samma hjul', async () => {
+  const { parseText, exportText } = await import('../js/store.js');
+  const w = sanitize({ format: 1, id: 'w', name: 'Hem', units: { u: { name: 'Bil', color: '#123456' } },
+    tasks: [task({ units: ['u'], done: { 2026: [0] }, rule: { month: 10, nth: -1, weeks: 1 }, remind: 3 })], periods: [] });
+  expect(await parseText(exportText(w), '2026-10-24')).toEqual(w);
+});
